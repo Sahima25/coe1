@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subject Master | GCE Salem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .card { border-radius: 12px; border: none; }
+        .table-container { max-height: 500px; overflow-y: auto; }
+        .sticky-thead th { position: sticky; top: 0; background-color: #212529; color: white; z-index: 10; }
+    </style>
+</head>
+<body class="bg-light">
+
+<div class="container-fluid py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold text-primary"><i class="fas fa-book me-2"></i>Subject Master</h2>
+        <div>
+            <a href="{{ url_for('download_template', type='course') }}" class="btn btn-outline-dark me-2">
+                <i class="fas fa-download me-1"></i> Download Template
+            </a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-home me-1"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold mb-3">Bulk Excel Upload</h5>
+                    <form action="{{ url_for('manage_courses') }}" method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label small text-muted">Select Excel File (.xlsx)</label>
+                            <input type="file" name="file" class="form-control" accept=".xlsx, .csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 fw-bold">
+                            <i class="fas fa-file-upload me-1"></i> Upload Subjects
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold mb-3">Manual Entry</h5>
+                    <form action="{{ url_for('manage_courses') }}" method="POST">
+                        <div class="mb-2">
+                            <label class="small fw-bold">Course Code</label>
+                            <input type="text" name="course_code" class="form-control" placeholder="e.g., 22CS401" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="small fw-bold">Course Name</label>
+                            <input type="text" name="course_name" class="form-control" placeholder="e.g., Python Programming" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="small fw-bold">Department</label>
+                            <input type="text" name="department" class="form-control" placeholder="e.g., CSE">
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="small fw-bold">Regulation</label>
+                                <input type="text" name="regulation" class="form-control" placeholder="2022">
+                            </div>
+                            <div class="col">
+                                <label class="small fw-bold">Semester</label>
+                                <input type="number" name="semester" class="form-control" value="1">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">Save Subject</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0">Course List</h5>
+                        <input type="text" id="tableSearch" class="form-control w-50" placeholder="Search by code or name...">
+                    </div>
+                    <div class="table-container border rounded">
+                        <table class="table table-hover mb-0" id="courseTable">
+                            <thead class="sticky-thead">
+                                <tr>
+                                    <th>Sem</th>
+                                    <th>Code</th>
+                                    <th>Course Name</th>
+                                    <th>Dept</th>
+                                    <th>Reg</th>
+                                    <th class="text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in courses %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ c.semester }}</span></td>
+                                    <td class="fw-bold text-primary">{{ c.course_code }}</td>
+                                    <td>{{ c.course_name }}</td>
+                                    <td>{{ c.department }}</td>
+                                    <td>{{ c.regulation }}</td>
+                                    <td class="text-center">
+                                        <a href="/delete_course/{{ c.course_code|urlencode }}" class="btn btn-sm btn-outline-danger py-0 px-2" onclick="return confirm('Are you sure you want to delete this course?');">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted">No courses found. Use upload or manual entry.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Real-time Table Filtering
+    document.getElementById('tableSearch').addEventListener('keyup', function() {
+        let value = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#courseTable tbody tr');
+        
+        rows.forEach(row => {
+            row.style.display = row.innerText.toLowerCase().includes(value) ? '' : 'none';
+        });
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Calendar | GCE Salem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+        }
+        .day-card {
+            height: 100px;
+            border: 1px solid #ddd;
+            padding: 5px;
+            cursor: pointer;
+            transition: 0.2s;
+            background-color: #f8f9fa; /* Default Gray */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+        .day-card:hover { transform: scale(1.02); border-color: #aaa; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .is-working { background-color: #d1e7dd; border-color: #badbcc; color: #0f5132; } /* Green */
+        .is-holiday { background-color: #f8d7da; border-color: #f5c2c7; color: #842029; } /* Red */
+        .day-num { font-weight: bold; font-size: 1.5em; }
+        .day-status { font-size: 0.85em; margin-top: 5px; font-weight: bold; text-transform: uppercase;}
+    </style>
+</head>
+<body class="bg-light p-4">
+    <div class="container bg-white p-4 shadow rounded" style="max-width: 900px;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3><a href="/dashboard" class="text-decoration-none text-primary"><i class="fas fa-arrow-left me-2"></i></a> Calendar Manager</h3>
+            <div>
+                <button class="btn btn-outline-secondary" onclick="changeMonth(-1)"><i class="fas fa-chevron-left"></i> Prev</button>
+                <span id="monthLabel" class="fw-bold mx-3 fs-4 text-primary"></span>
+                <button class="btn btn-outline-secondary" onclick="changeMonth(1)">Next <i class="fas fa-chevron-right"></i></button>
+            </div>
+        </div>
+        <hr>
+        <p class="text-center text-muted mb-4">Click any day to instantly toggle between <span class="badge bg-success">WORKING</span> and <span class="badge bg-danger">HOLIDAY</span></p>
+
+        <div class="calendar-header d-flex justify-content-between px-3 fw-bold text-muted mb-2">
+            <span style="width:14%; text-align:center">Sun</span>
+            <span style="width:14%; text-align:center">Mon</span>
+            <span style="width:14%; text-align:center">Tue</span>
+            <span style="width:14%; text-align:center">Wed</span>
+            <span style="width:14%; text-align:center">Thu</span>
+            <span style="width:14%; text-align:center">Fri</span>
+            <span style="width:14%; text-align:center">Sat</span>
+        </div>
+        
+        <div class="calendar-grid mt-2" id="calendar">
+            </div>
+    </div>
+
+    <script>
+        let today = new Date();
+        let currentDate = new Date(today.getFullYear(), today.getMonth(), 1); // Start at current month
+        let events = {};
+
+        async function loadEvents() {
+            let res = await fetch('/api/get_calendar_events');
+            events = await res.json();
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar');
+            grid.innerHTML = "";
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            document.getElementById('monthLabel').innerText = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            // Empty slots for previous month
+            for(let i=0; i<firstDay; i++) {
+                let div = document.createElement('div');
+                div.className = "day-card";
+                div.style.background = "transparent";
+                div.style.border = "none";
+                div.style.cursor = "default";
+                grid.appendChild(div);
+            }
+
+            for(let d=1; d<=daysInMonth; d++) {
+                let dateStr = `${year}-${String(month+1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                
+                // Set default rule: Sunday is Holiday, Weekday is Working. Then check if overridden in DB.
+                let type = 'Working';
+                let dayOfWeek = new Date(year, month, d).getDay();
+                
+                if (events[dateStr]) {
+                    type = events[dateStr];
+                } else if (dayOfWeek === 0) {
+                    type = 'Holiday';
+                }
+
+                let div = document.createElement('div');
+                div.className = `day-card ${type === 'Holiday' ? 'is-holiday' : 'is-working'}`;
+                div.innerHTML = `<div class="day-num">${d}</div><div class="day-status">${type}</div>`;
+                div.onclick = () => toggleDay(dateStr);
+                grid.appendChild(div);
+            }
+        }
+
+        async function toggleDay(dateStr) {
+            let res = await fetch('/api/toggle_calendar_date', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({date: dateStr})
+            });
+            let data = await res.json();
+            
+            if(data.success) {
+                if(data.new_status === 'Default') {
+                    delete events[dateStr]; // Removes from DB, reverts to Sunday rules
+                } else {
+                    events[dateStr] = data.new_status; // Hardcodes it to Working or Holiday
+                }
+                renderCalendar(); 
+            } else {
+                alert('Error updating date!');
+            }
+        }
+
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            renderCalendar();
+        }
+
+        loadEvents();
+    </script>
+</body>
+</html>

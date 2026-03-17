@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Scrutiny Entry | GCE Salem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .suggestion-box { 
+            position: absolute; background: white; border: 1px solid #ccc; 
+            width: 100%; max-height: 200px; overflow-y: auto; z-index: 1000; 
+            display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 4px; 
+        }
+        .suggestion-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; transition: 0.2s; }
+        .suggestion-item:hover { background: #e9ecef; color: #0d6efd; }
+        .subject-row { transition: all 0.3s ease; }
+        .card { border: none; border-radius: 15px; }
+        .badge-session { font-size: 1rem; padding: 8px 15px; }
+    </style>
+</head>
+<body class="bg-light p-4">
+    <div class="container bg-white p-5 shadow rounded" style="max-width: 900px;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h3 class="text-primary fw-bold mb-0">Scrutiny Member Entry</h3>
+                <p class="text-muted small mb-0">Controller of Examinations Office</p>
+            </div>
+            <span class="badge bg-primary badge-session shadow-sm">
+                <i class="fas fa-calendar-alt me-2"></i>{{ sess }} {{ yr }}
+            </span>
+        </div>
+        <hr>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <label class="fw-bold mb-1 text-secondary">Date of Duty</label>
+                <input type="date" id="date" class="form-control form-control-lg shadow-sm" value="{{ today_date }}">
+            </div>
+            <div class="col-md-6">
+                <label class="fw-bold mb-1 text-secondary">Faculty ID</label>
+                <div class="input-group input-group-lg shadow-sm">
+                    <input type="text" id="fid" class="form-control" placeholder="Search ID (e.g. FAC001)">
+                    <button class="btn btn-dark" type="button" onclick="verifyFaculty()">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="facultyInfo" class="alert alert-info border-0 shadow-sm mb-4" style="display:none;">
+            <div class="d-flex align-items-center">
+                <div class="flex-shrink-0"><i class="fas fa-user-circle fa-2x"></i></div>
+                <div class="ms-3"><h6 class="mb-0 fw-bold" id="facName"></h6><small id="facDept"></small></div>
+            </div>
+        </div>
+
+        <div class="p-4 bg-light border rounded mb-4">
+            <h6 class="fw-bold mb-3 text-uppercase text-muted ls-1">Subjects Scrutinised</h6>
+            <div id="subjectContainer">
+                <div class="d-flex gap-2 mb-3 subject-row">
+                    <div style="flex:1; position:relative">
+                        <input type="text" class="form-control form-control-lg c-in shadow-sm" placeholder="Type Subject Code or Name..." onkeyup="searchSubjects(this)">
+                        <div class="suggestion-box"></div>
+                    </div>
+                    <div style="width:110px">
+                        <input type="number" class="form-control form-control-lg q-in text-center shadow-sm" value="1" min="1">
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-outline-primary btn-sm mt-2 fw-bold" type="button" onclick="addRow()">
+                <i class="fas fa-plus-circle me-1"></i> ADD ANOTHER SUBJECT
+            </button>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-8">
+                <button class="btn btn-success btn-lg w-100 fw-bold shadow py-3" id="saveBtn" onclick="processClaim()">
+                    <i class="fas fa-file-pdf me-2"></i> SAVE & GENERATE CLAIM FORM
+                </button>
+            </div>
+            <div class="col-md-4">
+                <a href="/session_hub" class="btn btn-outline-secondary btn-lg w-100 py-3 shadow-sm">
+                    CANCEL
+                </a>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const SESSION_NAME = "{{ sess }}";
+    const SESSION_YEAR = "{{ yr }}";
+    let debounceTimer;
+
+    // 1. Verify Faculty ID
+    async function verifyFaculty() {
+        let id = document.getElementById('fid').value;
+        if(!id) return alert("Please enter a Faculty ID first.");
+        
+        let res = await fetch(`/get_faculty/${id}`);
+        let data = await res.json();
+        let box = document.getElementById('facultyInfo');
+        
+        if(data.error) {
+            box.className = 'alert alert-danger border-0 shadow-sm mb-4';
+            document.getElementById('facName').innerText = "Faculty Not Found";
+            document.getElementById('facDept').innerText = "Please check ID in Faculty Master";
+        } else {
+            box.className = 'alert alert-success border-0 shadow-sm mb-4';
+            document.getElementById('facName').innerText = data.name;
+            document.getElementById('facDept').innerText = `${data.designation} | ${data.department}`;
+        }
+        box.style.display = 'block';
+    }
+
+    // 2. Search Subjects (Auto-suggest)
+    function searchSubjects(input) {
+        clearTimeout(debounceTimer);
+        let box = input.nextElementSibling;
+        if(input.value.length < 2) { box.style.display = 'none'; return; }
+
+        debounceTimer = setTimeout(async () => {
+            let res = await fetch(`/api/search_courses?q=${input.value}`);
+            let items = await res.json();
+            box.innerHTML = '';
+            if(items.length > 0) {
+                box.style.display = 'block';
+                items.forEach(item => {
+                    let div = document.createElement('div');
+                    div.className = 'suggestion-item';
+                    div.innerHTML = `<strong>${item.course_code}</strong> - ${item.course_name} <br><small class="text-muted">Reg: ${item.regulation}</small>`;
+                    div.onclick = () => {
+                        input.value = `${item.course_code} - ${item.course_name}`;
+                        box.style.display = 'none';
+                    };
+                    box.appendChild(div);
+                });
+            }
+        }, 300);
+    }
+
+    // 3. Add New Row
+    function addRow() {
+        let container = document.getElementById('subjectContainer');
+        let div = document.createElement('div');
+        div.className = 'd-flex gap-2 mb-3 subject-row';
+        div.innerHTML = `
+            <div style="flex:1; position:relative">
+                <input type="text" class="form-control form-control-lg c-in shadow-sm" placeholder="Search Course..." onkeyup="searchSubjects(this)">
+                <div class="suggestion-box"></div>
+            </div>
+            <input type="number" class="form-control form-control-lg q-in text-center shadow-sm" value="1" min="1" style="width:110px">
+            <button class="btn btn-outline-danger" onclick="this.parentElement.remove()"><i class="fas fa-times"></i></button>
+        `;
+        container.appendChild(div);
+    }
+
+    // 4. Save and Download PDF
+    async function processClaim() {
+        let subjects = [];
+        document.querySelectorAll('.subject-row').forEach(row => {
+            let val = row.querySelector('.c-in').value;
+            let qty = row.querySelector('.q-in').value;
+            if(val) subjects.push({ code: val.split(' - ')[0], count: qty });
+        });
+
+        let payload = {
+            faculty_id: document.getElementById('fid').value,
+            date: document.getElementById('date').value,
+            session_name: SESSION_NAME,
+            session_year: SESSION_YEAR,
+            courses: subjects
+        };
+
+        if(!payload.faculty_id || !payload.date || subjects.length === 0) {
+            return alert("Missing Data: Please ensure Faculty ID, Date, and Subjects are filled.");
+        }
+
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Processing Claim...';
+
+        try {
+            let response = await fetch('/process', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            let result = await response.json();
+
+            // FIND THIS SECTION IN scrutiny.html
+            if(result.success) {
+                alert("Entry Saved Successfully! Opening Claim Form...");
+                
+                // CHANGE THIS LINE to use /claim instead of /summary or /summary_report
+                window.open(`/faculty_report/${result.faculty_id}/claim`, '_blank');
+                
+                location.reload(); 
+            }
+            else {
+                alert("Error: " + result.error);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-file-pdf me-2"></i> SAVE & GENERATE CLAIM FORM';
+            }
+        } catch(e) {
+            alert("Connection Error. Is the server running?");
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>

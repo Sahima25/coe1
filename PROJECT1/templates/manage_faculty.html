@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Faculty Management - COE</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #f8f9fa; }
+        .table-container { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .card-upload { border-left: 4px solid #0d6efd; transition: transform 0.2s; }
+        .card-upload:hover { transform: translateY(-3px); }
+        .table-hover tbody tr:hover { background-color: #f1f4f9; }
+        .sticky-header { position: sticky; top: 0; background: white; z-index: 100; padding-bottom: 10px; }
+    </style>
+</head>
+<body class="p-4">
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4 sticky-header">
+        <div>
+            <h2 class="fw-bold mb-0"><i class="fas fa-users-cog text-primary me-2"></i> Faculty Master Database</h2>
+            <p class="text-muted small mb-0">Manage examiners and distance data for claim calculations.</p>
+        </div>
+        <div class="btn-group shadow-sm">
+            <a href="/clear_faculty" class="btn btn-danger" onclick="return confirm('WARNING: This will delete EVERY faculty member. Are you sure?')">
+                <i class="fas fa-trash-alt me-1"></i> Clear All Faculty
+            </a>
+            <a href="/dashboard" class="btn btn-outline-secondary ms-2"><i class="fas fa-arrow-left me-1"></i> Back to Dashboard</a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm border-0">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card card-upload shadow-sm border-0 h-100">
+                <div class="card-body">
+                    <h6 class="fw-bold text-success"><i class="fas fa-file-excel me-2"></i> Bulk Faculty Import</h6>
+                    <p class="text-muted small">Upload faculty Excel (ID, Name, Bank, Category).</p>
+                    <form action="/manage_faculty" method="POST" enctype="multipart/form-data">
+                        <div class="input-group">
+                            <input type="file" name="file" class="form-control" accept=".xlsx, .xls, .csv" required>
+                            <button type="submit" class="btn btn-success fw-bold">Upload List</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card card-upload shadow-sm border-0 h-100" style="border-left-color: #6610f2;">
+                <div class="card-body">
+                    <h6 class="fw-bold" style="color: #6610f2;"><i class="fas fa-map-marked-alt me-2"></i> Distance Matrix (TA/DA)</h6>
+                    <p class="text-muted small">Upload College list with Distance and TA amounts.</p>
+                    <form action="/upload_distance_matrix" method="POST" enctype="multipart/form-data">
+                        <div class="input-group">
+                            <input type="file" name="file" class="form-control" accept=".xlsx, .xls, .csv" required>
+                            <button type="submit" class="btn btn-primary fw-bold" style="background-color: #6610f2; border-color: #6610f2;">Sync Matrix</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="facultySearch" class="form-control border-start-0" placeholder="Search by name or ID...">
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 600px;">
+            <table class="table table-hover align-middle" id="facultyTable">
+                <thead class="table-light sticky-top">
+                    <tr>
+                        <th>Faculty ID</th>
+                        <th>Name</th>
+                        <th>Designation / Dept</th>
+                        <th>Institution Address</th>
+                        <th>Mobile</th>
+                        <th>Bank Details</th>
+                        <th>Dist (km)</th>
+                        <th>Category</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in faculty %}
+                    <tr>
+                        <td><span class="badge bg-light text-dark border">{{ f.faculty_id }}</span></td>
+                        <td class="fw-bold">{{ f.name }}</td>
+                        <td>
+                            <small class="d-block fw-bold">{{ f.designation }}</small>
+                            <small class="text-muted">{{ f.department }}</small>
+                        </td>
+                        <td><div style="max-width: 200px;" class="small text-truncate" title="{{ f.institution_address }}">{{ f.institution_address }}</div></td>
+                        <td>{{ f.mobile_number }}</td>
+                        <td>
+                            <small><b>{{ f.bank_name }}</b><br>A/C: {{ f.account_number }}</small>
+                        </td>
+                        <td class="text-center">{{ f.distance }}</td>
+                        <td>
+                            <span class="badge {% if f.category == 'External' %}bg-warning text-dark{% else %}bg-info text-dark{% endif %}">
+                                {{ f.category }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group shadow-sm">
+                                <a href="/edit_faculty/{{ f.faculty_id }}" class="btn btn-sm btn-outline-primary" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="/delete_faculty/{{ f.faculty_id }}" 
+                                   class="btn btn-sm btn-outline-danger" 
+                                   onclick="return confirm('Delete {{ f.name }}?')" title="Delete">
+                                    <i class="fas fa-trash-alt"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-5 text-muted">
+                            <i class="fas fa-user-slash fa-3x mb-3 d-block"></i>
+                            No faculty records found. Upload a list to begin.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('facultySearch').addEventListener('keyup', function() {
+        let filter = this.value.toLowerCase();
+        let rows = document.querySelectorAll('#facultyTable tbody tr');
+        
+        rows.forEach(row => {
+            let text = row.textContent.toLowerCase();
+            row.style.display = text.includes(filter) ? '' : 'none';
+        });
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

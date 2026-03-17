@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Claim Editor | COE Master Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style> 
+        body { background-color: #f4f6f9; font-family: 'Segoe UI', sans-serif; } 
+        .card { border-radius: 15px; border: none; }
+        .table-input { border: 1px solid transparent; background: transparent; width: 100%; padding: 6px; border-radius: 4px; transition: all 0.2s; }
+        .table-input:hover { background: #f8f9fa; border-color: #dee2e6; }
+        .table-input:focus { background: #fff; border-color: #0d6efd; outline: none; box-shadow: 0 0 0 0.2rem rgba(13,110,253,.1); }
+        .auto-filled { background-color: #e8f5e9 !important; font-weight: 600; border: 1px solid #28a745 !important; color: #155724; }
+        .section-header { border-bottom: 2px solid #0d6efd; padding-bottom: 10px; margin-bottom: 20px; color: #0d6efd; font-weight: bold; }
+        .fac-status { font-size: 0.75rem; min-height: 20px; }
+        .table thead { position: sticky; top: 0; z-index: 10; }
+    </style>
+</head>
+<body class="p-4">
+
+<div class="container-fluid" style="max-width: 1350px;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-primary"><i class="fas fa-file-signature me-2"></i> Practical Claim Form Editor</h3>
+        <div>
+            <a href="/practical_hub" class="btn btn-outline-secondary me-2 fw-bold"><i class="fas fa-arrow-left me-1"></i> Back to Hub</a>
+            <a href="/logout" class="btn btn-danger fw-bold"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        </div>
+    </div>
+<form action="/download_practical_claim" method="POST">
+    <input type="hidden" name="session_name" value="{{ request.form.get('session_name') }}">
+    <input type="hidden" name="session_year" value="{{ request.form.get('session_year') }}">
+    
+    <input type="hidden" name="order_no" value="{{ sched.order_no }}">
+    <input type="hidden" name="course_code" value="{{ sched.course_code }}">
+    <input type="hidden" name="course_name" value="{{ course_name }}">
+    <input type="hidden" name="exam_date" value="{{ sched.exam_date }}">
+    
+    <input type="hidden" name="external_examiner" value="{{ ext_name }}">
+    <input type="hidden" name="ext_desig" value="{{ ext_desig }}">
+    <input type="hidden" name="ext_inst" value="{{ ext_inst }}">
+
+    {% for staff in internals %}
+    <input type="hidden" name="internal_examiner[]" value="{{ staff.name }}">
+    <input type="hidden" name="int_desig[]" value="{{ staff.desig }}">
+    <input type="hidden" name="candidates_present[]" value="{{ staff.cands }}">
+    {% endfor %}
+
+    <input type="hidden" name="skilled_assistant" value="{{ sched.skilled_assistant_name }}">
+    <input type="hidden" name="non_teaching_staff" value="{{ sched.lab_assistant_name }}">
+
+    <button type="submit" class="btn btn-success">Download PDF Claim</button>
+</form>
+    <div class="card shadow-lg p-4">
+        <form action="/download_practical_claim" method="POST">
+            <input type="hidden" name="department" value="{{ dept }}">
+            <input type="hidden" name="order_no" value="{{ sched.order_no }}">
+
+            <div class="row mb-4 bg-light p-3 rounded mx-0 border">
+                <div class="col-md-4">
+                    <label class="fw-bold small text-primary text-uppercase">Claim Category</label>
+                    <select name="claim_type" class="form-select fw-bold border-primary-subtle shadow-sm">
+                        <option value="Project" {% if "M.E" in sched.programme.upper() %}selected{% endif %}>Project (Rs. 300/cand)</option>
+                        <option value="Practical" {% if "M.E" not in sched.programme.upper() %}selected{% endif %}>Regular Practical (Rs. 25/cand)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="fw-bold small text-muted text-uppercase">Exam Session</label>
+                    <div class="input-group shadow-sm">
+                        <input type="text" name="session_name" class="form-control" value="NOV / DEC">
+                        <input type="number" name="session_year" class="form-control" value="2026">
+                    </div>
+                </div>
+                <div class="col-md-5 text-end">
+                    <div class="p-2 border rounded bg-white shadow-sm d-inline-block">
+                        <span class="small text-muted d-block text-uppercase fw-bold">Course Details</span>
+                        <span class="fw-bold text-dark fs-5">{{ sched.course_code }}</span> | 
+                        <span class="badge bg-primary">Registered: {{ total_registered }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <h5 class="section-header"><i class="fas fa-users me-2"></i>Examiner & Support Staff Roster</h5>
+
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle text-center shadow-sm">
+                    <thead class="table-dark">
+                        <tr>
+                            <th width="4%">S.No</th>
+                            <th width="12%">Role</th>
+                            <th width="24%">Name (Linked to Database)</th>
+                            <th width="18%">Designation</th>
+                            <th width="24%">Institution / Address</th>
+                            <th width="9%">Present</th>
+                            <th width="9%">DB Sync</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for i in range(6) %}
+                        <tr>
+                            <td>{{ i+1 }}</td>
+                            <td class="text-start ps-3 text-secondary small">{% if i == 0 %}Internal Examiner(s){% endif %}</td>
+                            <td>
+                                <input type="text" name="internal_examiner[]" class="table-input fac-input" 
+                                       value="{{ internals[i].name if i < internals|length else '' }}" placeholder="Type name to search...">
+                            </td>
+                            <td>
+                                <input type="text" name="int_desig[]" class="table-input" value="Internal Examiner">
+                            </td>
+                            <td class="text-muted small">GCE Salem</td>
+                            <td>
+                                <input type="number" name="candidates_present[]" class="table-input fw-bold cand-input text-center" 
+                                       value="{{ internals[i].cands if i < internals|length else '' }}" placeholder="0">
+                            </td>
+                            <td class="fac-status text-center"></td>
+                        </tr>
+                        {% endfor %}
+
+                        <tr class="table-warning border-warning">
+                            <td class="fw-bold">7</td>
+                            <td class="text-start ps-3 fw-bold text-dark">External Examiner</td>
+                            <td>
+                                <input type="text" name="external_examiner" id="external_examiner" class="table-input fac-input fw-bold" 
+                                       value="{{ ext_name }}" placeholder="Search External DB...">
+                            </td>
+                            <td>
+                                <input type="text" name="ext_desig" class="table-input" value="{{ ext_desig }}" placeholder="Designation">
+                            </td>
+                            <td>
+                                <input type="text" name="ext_inst" id="ext_inst" class="table-input" value="{{ ext_inst }}" 
+                                       placeholder="Fetching Institution Address..." style="font-size: 0.8rem;">
+                            </td>
+                            <td class="text-muted fw-bold small">Auto-Sum</td>
+                            <td class="fac-status text-center"></td>
+                        </tr>
+
+                        <tr class="table-info border-info">
+                            <td>8</td>
+                            <td class="text-start ps-3">Skilled Assistant</td>
+                            <td>
+                                <input type="text" name="skilled_assistant" class="table-input fac-input" 
+                                       value="{{ sk_asst }}" placeholder="Assistant Name...">
+                            </td>
+                            <td>
+                                <input type="text" name="sk_desig" class="table-input" value="Skilled Assistant">
+                            </td>
+                            <td class="text-muted small">GCE Salem</td>
+                            <td class="text-muted fw-bold small">Auto-Sum</td>
+                            <td class="fac-status text-center"></td>
+                        </tr>
+
+                        <tr class="table-secondary">
+                            <td>9</td>
+                            <td class="text-start ps-3 text-muted">Lab Assistant</td>
+                            <td>
+                                <input type="text" name="non_teaching_staff" class="table-input fac-input" placeholder="Staff Name...">
+                            </td>
+                            <td>
+                                <input type="text" name="nt_desig" class="table-input" value="Lab Assistant">
+                            </td>
+                            <td class="text-muted small">GCE Salem</td>
+                            <td class="text-muted fw-bold small">Auto-Sum</td>
+                            <td class="fac-status text-center"></td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr class="border-top border-3 border-dark">
+                            <td colspan="5" class="text-end fw-bold pe-4">Combined Total Candidates (External & Staff Pay Basis):</td>
+                            <td class="fw-bold fs-4 text-success border-start border-end" id="total-cands-display">0</td>
+                            <td class="bg-white"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            
+
+            <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold shadow mt-3 py-3 border-3">
+                <i class="fas fa-file-pdf me-2"></i> COMPILE & DOWNLOAD 2-PAGE CLAIM FORM
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const inputs = document.querySelectorAll('.fac-input');
+        const candInputs = document.querySelectorAll('.cand-input');
+        const totalDisplay = document.getElementById('total-cands-display');
+
+        // 1. AUTO-SUM ATTENDANCE
+        function calculateTotal() {
+            let total = 0;
+            candInputs.forEach(input => {
+                let val = parseInt(input.value);
+                if (!isNaN(val)) total += val;
+            });
+            totalDisplay.innerText = total;
+        }
+
+        candInputs.forEach(input => {
+            input.addEventListener('input', calculateTotal);
+        });
+        calculateTotal(); // Initial run
+
+        // 2. LIVE DB FETCHING (Name -> Designation & Address)
+        async function fetchFacultyDetails(inputElement) {
+            const name = inputElement.value.trim();
+            const row = inputElement.closest('tr');
+            const statusCell = row.querySelector('.fac-status');
+            
+            // UI Hooks
+            const isExternalRow = (inputElement.id === "external_examiner");
+            const instField = document.getElementById('ext_inst');
+            const desigField = row.querySelector('input[name="int_desig[]"], input[name="ext_desig"], input[name="sk_desig"], input[name="nt_desig"]');
+
+            if (name.length < 3) {
+                statusCell.innerHTML = '';
+                return;
+            }
+
+            statusCell.innerHTML = '<i class="fas fa-spinner fa-spin text-primary"></i>';
+
+            try {
+                const response = await fetch(`/api/get_faculty_exact?name=${encodeURIComponent(name)}`);
+                const data = await response.json();
+
+                if (data.found) {
+                    statusCell.innerHTML = '<i class="fas fa-check-circle text-success" title="Linked to Database"></i>';
+                    
+                    // Fill Designation
+                    if (desigField && data.designation) {
+                        desigField.value = data.designation;
+                        desigField.classList.add('auto-filled');
+                    }
+                    
+                    // CRITICAL: Auto-fill Address for External Examiner only
+                    if (isExternalRow && instField && data.institution) {
+                        instField.value = data.institution;
+                        instField.classList.add('auto-filled');
+                    }
+                } else {
+                    statusCell.innerHTML = '<span class="badge bg-secondary">Manual</span>';
+                    if (desigField) desigField.classList.remove('auto-filled');
+                    if (isExternalRow && instField) instField.classList.remove('auto-filled');
+                }
+            } catch (error) {
+                console.error("Database fetch failed:", error);
+                statusCell.innerHTML = '';
+            }
+        }
+
+        // Add Listeners with Delay
+        inputs.forEach(input => {
+            // Check existing values on load (e.g., from Edit mode)
+            if (input.value.length > 2) fetchFacultyDetails(input);
+
+            input.addEventListener('input', function() {
+                clearTimeout(this.delay);
+                this.delay = setTimeout(() => fetchFacultyDetails(this), 600);
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

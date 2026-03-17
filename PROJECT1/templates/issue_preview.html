@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Preview Issue Register</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style> body { background-color: #f4f6f9; } </style>
+</head>
+<body class="p-4">
+
+<div class="container" style="max-width: 900px;">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-bold text-danger"><i class="fas fa-search me-2"></i> Verify Packet Allocations</h3>
+        <a href="/issue_register_hub/{{ phase_id }}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left"></i> Back</a>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-danger border-2">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-6"><b>Examiner Name:</b> {{ fac.name }}</div>
+                <div class="col-6"><b>Faculty ID:</b> {{ fac.faculty_id }}</div>
+                <div class="col-6 mt-2"><b>Institution:</b> {{ fac.institution_address }}</div>
+                <div class="col-6 mt-2"><b>Mobile:</b> {{ fac.mobile_number }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-lg p-4">
+        <p class="text-muted small mb-3">Packets dynamically split (Max 30, with overflow limits applied). Dummy numbers sequentially tracked.</p>
+        <table class="table table-bordered text-center align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Date</th>
+                    <th>Course Code</th>
+                    <th>Packet No</th>
+                    <th>Dummy Range</th>
+                    <th>Scripts</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in packets %}
+                <tr>
+                    <td>{{ p.date[:10] }}</td>
+                    <td class="fw-bold">{{ p.course_code }}</td>
+                    <td><span class="badge bg-primary">Pkt {{ p.packet_no }}</span></td>
+                    <td class="text-danger fw-bold">{{ p.dummy_range }}</td>
+                    <td>{{ p.scripts }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <form action="/download_issue_register/{{ phase_id }}" method="POST" class="mt-4">
+            <input type="hidden" name="faculty_id" value="{{ fac.faculty_id }}">
+            <button type="submit" class="btn btn-danger btn-lg w-100 fw-bold shadow">
+                <i class="fas fa-file-pdf me-2"></i> Print Official Issue Register
+            </button>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

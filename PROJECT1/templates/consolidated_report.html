@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Consolidated Report - GCE Salem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; }
+        .table-custom th { background-color: #0d6efd; color: white; }
+        .abstract-card { background: #fff; border-left: 5px solid #198754; }
+    </style>
+</head>
+<body>
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Consolidated Scrutiny Report - {{ sess }} {{ yr }}</h2>
+        <div>
+            <a href="/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+            <a href="/export_excel" class="btn btn-success">Export to Excel</a>
+        </div>
+    </div>
+
+    <div class="card p-3 mb-4 shadow-sm">
+        <form method="GET" action="/report" class="row g-3">
+            <div class="col-md-4">
+                <label>Faculty Category</label>
+                <select name="category" class="form-select">
+                    <option value="All" {% if cat_filter == 'All' %}selected{% endif %}>All</option>
+                    <option value="Internal" {% if cat_filter == 'Internal' %}selected{% endif %}>Internal</option>
+                    <option value="External" {% if cat_filter == 'External' %}selected{% endif %}>External</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label>Bank Type</label>
+                <select name="bank_type" class="form-select">
+                    <option value="All" {% if bank_filter == 'All' %}selected{% endif %}>All</option>
+                    <option value="Nationalized" {% if bank_filter == 'Nationalized' %}selected{% endif %}>Nationalized</option>
+                    <option value="Non-Nationalized" {% if bank_filter == 'Non-Nationalized' %}selected{% endif %}>Non-Nationalized</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card abstract-card shadow-sm p-3">
+                <h5 class="text-success">Bank Abstract</h5>
+                <table class="table table-sm table-bordered mt-2">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Bank Name</th>
+                            <th>No. of Faculty</th>
+                            <th>Total Amount (Rs)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bank, data in bank_abstract.items() %}
+                        <tr>
+                            <td>{{ bank }}</td>
+                            <td>{{ data.count }}</td>
+                            <td><b>{{ "%.0f"|format(data.total) }}</b></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm p-3 bg-light">
+                <h5 class="text-primary">Overall Totals</h5>
+                <ul class="list-group list-group-flush mt-2">
+                    <li class="list-group-item d-flex justify-content-between"><span>Total Remuneration:</span> <b>Rs. {{ "%.0f"|format(totals.remun) }}</b></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Total TA:</span> <b>Rs. {{ "%.0f"|format(totals.ta) }}</b></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Total DA:</span> <b>Rs. {{ "%.0f"|format(totals.da) }}</b></li>
+                    <li class="list-group-item d-flex justify-content-between active"><span>GRAND TOTAL:</span> <b>Rs. {{ "%.0f"|format(totals.grand) }}</b></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-5">
+        <div class="card-body">
+            <table class="table table-bordered table-hover table-custom align-middle">
+                <thead>
+                    <tr>
+                        <th>S.No</th>
+                        <th>Faculty ID</th>
+                        <th>Name</th>
+                        <th>Dept</th>
+                        <th>Category</th>
+                        <th>Bank details (Acc / IFSC)</th>
+                        <th>QPs</th>
+                        <th>Remun (Rs)</th>
+                        <th>TA (Rs)</th>
+                        <th>DA (Rs)</th>
+                        <th>Total (Rs)</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in records %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td><b>{{ r.faculty_id }}</b></td>
+                        <td>{{ r.name }}</td>
+                        <td>{{ r.department }}</td>
+                        <td>{{ r.category }}</td>
+                        <td>
+                            <div>{{ r.bank_name }}</div>
+                            <small class="text-muted">{{ r.account_number }} / {{ r.ifsc }}</small>
+                        </td>
+                        <td class="text-center">{{ "%.0f"|format(r.total_qps) }}</td>
+                        <td class="text-end">{{ "%.0f"|format(r.remuneration) }}</td>
+                        <td class="text-end">{{ "%.0f"|format(r.ta_amount) }}</td>
+                        <td class="text-end">{{ "%.0f"|format(r.da_amount) }}</td>
+                        <td class="text-end fw-bold text-success">{{ "%.0f"|format(r.grand_total) }}</td>
+                        <td class="text-center">
+                            <a href="/faculty_report/{{ r.faculty_id }}/claim" class="btn btn-sm btn-outline-primary" target="_blank">View Claim</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="12" class="text-center text-danger">No scrutiny records found for this session.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Session | GCE Salem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .selector-card {
+            border: none;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 450px;
+        }
+        .icon-circle {
+            width: 80px;
+            height: 80px;
+            background: #e7f1ff;
+            color: #0d6efd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            margin: 0 auto 20px;
+            font-size: 2rem;
+        }
+        .form-select-lg {
+            border-radius: 10px;
+            font-size: 1.1rem;
+            border: 2px solid #eee;
+        }
+        .form-select-lg:focus {
+            border-color: #0d6efd;
+            box-shadow: none;
+        }
+        .btn-enter {
+            border-radius: 10px;
+            padding: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            transition: 0.3s;
+        }
+        .btn-enter:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(13, 110, 253, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+<div class="card selector-card shadow-lg p-4">
+    <div class="card-body text-center">
+        <div class="icon-circle shadow-sm">
+            <i class="fas fa-university"></i>
+        </div>
+        <h3 class="fw-bold text-dark mb-1">Exam Session</h3>
+        <p class="text-muted mb-4">Select the active period to begin scrutiny</p>
+
+        <form action="{{ url_for('session_hub') }}" method="POST">
+            <div class="text-start mb-3">
+                <label class="form-label small fw-bold text-uppercase text-muted ms-1">Examination Month</label>
+                <select name="session_name" class="form-select form-select-lg" required>
+                    <option value="Nov / Dec">November / December</option>
+                    <option value="April / May">April / May</option>
+                </select>
+            </div>
+
+            <div class="text-start mb-4">
+                <label class="form-label small fw-bold text-uppercase text-muted ms-1">Academic Year</label>
+                <select name="session_year" class="form-select form-select-lg" required>
+                    <option value="2024">2024</option>
+                    <option value="2025" selected>2025</option>
+                    <option value="2026">2026</option>
+                    <option value="2027">2027</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100 btn-enter mb-3">
+                ENTER DASHBOARD <i class="fas fa-arrow-right ms-2"></i>
+            </button>
+            
+            <a href="{{ url_for('dashboard') }}" class="text-decoration-none text-muted small">
+                <i class="fas fa-chevron-left me-1"></i> Back to Main Menu
+            </a>
+        </form>
+    </div>
+</div>
+
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

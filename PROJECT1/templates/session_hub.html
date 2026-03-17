@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Session Hub | GCE Salem</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #f4f7f6; }
+        .hub-card {
+            border: none;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none !important;
+        }
+        .hub-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1) !important;
+        }
+        .icon-box {
+            width: 70px;
+            height: 70px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body class="py-5">
+
+<div class="container text-center">
+    <div class="mb-5">
+        <h6 class="text-uppercase fw-bold text-muted ls-2">Active Examination Period</h6>
+        <h1 class="display-4 fw-bold text-primary">{{ sess }} {{ yr }}</h1>
+        <a href="{{ url_for('session_selector') }}" class="btn btn-sm btn-outline-secondary rounded-pill">
+            <i class="fas fa-exchange-alt me-1"></i> Change Session
+        </a>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+        <div class="col-md-5">
+            <a href="{{ url_for('scrutiny') }}" class="card hub-card shadow-sm h-100 p-4">
+                <div class="card-body">
+                    <div class="icon-box bg-primary text-white shadow">
+                        <i class="fas fa-pen-nib"></i>
+                    </div>
+                    <h3 class="fw-bold text-dark">Scrutiny Entry</h3>
+                    <p class="text-muted">Enter new claim details for subjects scrutinised by members today.</p>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-5">
+            <a href="{{ url_for('report') }}" class="card hub-card shadow-sm h-100 p-4">
+                <div class="card-body">
+                    <div class="icon-box bg-success text-white shadow">
+                        <i class="fas fa-file-chart-pie"></i>
+                    </div>
+                    <h3 class="fw-bold text-dark">Consolidated Report</h3>
+                    <p class="text-muted">View abstracts, check faculty history, and export bank statements.</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <div class="mt-5">
+        <a href="{{ url_for('dashboard') }}" class="text-secondary text-decoration-none">
+            <i class="fas fa-arrow-left me-1"></i> Return to Main Dashboard
+        </a>
+    </div>
+</div>
+
+</body>
+</html>
