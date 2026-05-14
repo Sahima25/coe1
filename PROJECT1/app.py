@@ -101,7 +101,17 @@ def init_db():
             if not c.fetchone(): c.execute("ALTER TABLE prac_schedules ADD COLUMN skilled_assistant VARCHAR(150) AFTER external_examiner")
         except:
             pass
+        # Add inside init_db() after course_master table creation
+        try:
+            c.execute("SHOW COLUMNS FROM course_master LIKE 'degree_type'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE course_master ADD COLUMN degree_type VARCHAR(20) DEFAULT 'B.E.' AFTER course_name")
             
+            c.execute("SHOW COLUMNS FROM val_examiners LIKE 'college_address'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE val_examiners ADD COLUMN college_address TEXT, ADD COLUMN mobile VARCHAR(50), ADD COLUMN email VARCHAR(100)")
+        except:
+            pass
         db.commit()
         db.close()
     except Exception as e: 
@@ -116,7 +126,12 @@ def clean_str(val):
     if isinstance(val, pd.Series): val = val.dropna().iloc[0] if not val.dropna().empty else ""
     if pd.isna(val) or str(val).lower() in ['nan','none','null','']: return ''
     return str(val).strip()
-
+def clean_pdf_text(text):
+    if not text: return ""
+    replacements = {"\u2013": "-", "\u2014": "-", "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"'}
+    for key, val in replacements.items():
+        text = str(text).replace(key, val)
+    return text.encode('latin-1', 'ignore').decode('latin-1')
 def clean_name(n):
     if isinstance(n, pd.Series): n = n.dropna().iloc[0] if not n.dropna().empty else ""
     if pd.isna(n): return ""
@@ -206,7 +221,11 @@ class CustomPDF(FPDF):
         self.set_font("Helvetica", 'B', 10)
         self.cell(0, 6, "OFFICE OF THE CONTROLLER OF EXAMINATIONS", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         self.ln(2)
-
+def name_match(name1, name2):
+    """ Standardized name matching to handle dots and spaces """
+    def normalize(n): 
+        return str(n).lower().replace('.', '').replace(' ', '').strip()
+    return normalize(name1) in normalize(name2) or normalize(name2) in normalize(name1)
 
 # ==========================================
 # 3. AUTH & DASHBOARD ROUTES
@@ -423,6 +442,7 @@ def faculty_pdf(fid):
     remun_amt = int(float(r['remuneration']))
     grand_amt = int(float(r['grand_total']))
 
+    # ==================== PAGE 1: CLAIM FORM ====================
     pdf.add_page()
     
     pdf.set_font("Helvetica", 'B', 9)
@@ -581,6 +601,7 @@ def faculty_pdf(fid):
     sy = int(r['session_year'] or 2025)
     pdf.multi_cell(0, 4, f"I hereby declare that I will duly include the above claim in my Income Tax calculations for the Financial Year {sy}-{sy+1}.", align='C')
 
+    # ==================== PER-COURSE CHECKLIST PAGES ====================
     questions = [
         ("Are the questions adhering to given Regulation?", 8), 
         ("Are the questions within the syllabus?", 8),
@@ -597,82 +618,92 @@ def faculty_pdf(fid):
         ("Standard of the question paper: High (H) / Normal (N) / Sub Standard (SS)", 8), 
         ("Can you recommend this question paper to the students for end\nsemester examination?", 12)
     ]
-    
-    # Page 2
-    pdf.add_page()
-    pdf.set_font("Times", 'B', 10)
-    pdf.cell(0, 6, "CHECKLIST FOR QUESTION PAPER SCRUTINY", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(3)
 
-    pdf.set_font("Helvetica", '', 9)
-    pdf.cell(35, 6, "Scrutiny Member:")
-    pdf.cell(100, 6, str(fac['name']))
-    pdf.cell(25, 6, "Designation:")
-    pdf.cell(30, 6, str(fac['designation']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    
-    pdf.cell(35, 6, "Institution Name:")
-    pdf.cell(100, 6, str(fac['institution_address'])[:55])
-    pdf.cell(25, 6, "Mobile No:")
-    pdf.cell(30, 6, mob, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    
-    sx, sy = pdf.get_x(), pdf.get_y()
-    pdf.cell(35, 6, "Course Code(s):")
-    
-    pdf.set_xy(sx + 135, sy)
-    pdf.cell(25, 6, "Date:")
-    pdf.cell(30, 6, str(r['scrutiny_date']))
-    
-    pdf.set_xy(sx + 35, sy + 1)
-    c_full = ", ".join([str(c.get('code','')) for c in courses])
-    pdf.multi_cell(95, 4, c_full[:150], border=0, align='L')
-    
-    pdf.set_y(max(pdf.get_y(), sy + 6) + 2)
-
-    pdf.set_font("Helvetica", 'B', 9)
-    pdf.set_fill_color(230, 230, 230)
-    pdf.cell(10, 6, "S.No", border=1, align='C', fill=True)
-    pdf.cell(130, 6, "Details", border=1, align='C', fill=True)
-    pdf.cell(50, 6, "Comments", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True)
-    
-    pdf.set_font("Helvetica", '', 9)
-    for idx, (q, h) in enumerate(questions, 1):
-        sx, sy = pdf.get_x(), pdf.get_y()
-        pdf.cell(10, h, str(idx), border=1, align='C')
-        pdf.cell(130, h, "", border=1, align='C') 
-        pdf.set_xy(sx + 10, sy + (1 if h == 12 else 1)) 
-        pdf.multi_cell(130, 5, q, border=0, align='L')
-        pdf.set_xy(sx + 140, sy)
-        if idx == 13: 
-            pdf.cell(16.6, h, "H", border=1, align='C')
-            pdf.cell(16.7, h, "N", border=1, align='C')
-            pdf.cell(16.7, h, "SS", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-        else: 
-            pdf.cell(25, h, "Yes", border=1, align='C')
-            pdf.cell(25, h, "No", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
-
-    sx, sy = pdf.get_x(), pdf.get_y()
-    h_15 = 16
-    if sy + h_15 > 270:
+    for course_idx, course in enumerate(courses, start=1):
         pdf.add_page()
+        pdf.set_font("Times", 'B', 10)
+        pdf.cell(0, 6, f"CHECKLIST FOR QUESTION PAPER SCRUTINY", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(3)
+
+        # Member details (same for all courses)
+        pdf.set_font("Helvetica", '', 9)
+        pdf.cell(35, 6, "Scrutiny Member:")
+        pdf.cell(100, 6, str(fac['name']))
+        pdf.cell(25, 6, "Designation:")
+        pdf.cell(30, 6, str(fac['designation']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.cell(35, 6, "Institution Name:")
+        pdf.cell(100, 6, str(fac['institution_address'])[:55])
+        pdf.cell(25, 6, "Mobile No.:")
+        pdf.cell(30, 6, mob, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        # ----- FIXED COURSE HEADER (no overlapping) -----
+        # First line: Course Code (left) and Date (right)
+        pdf.set_font("Helvetica", '', 9)
+        pdf.cell(35, 6, "Course Code:")
+        pdf.cell(40, 6, course['code'])
+        # Move to the right side for date (adjust x as needed)
+        pdf.set_x(150)
+        pdf.cell(25, 6, "Date:")
+        pdf.cell(30, 6, str(r['scrutiny_date']), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        # Second line: Course Name (wrapped if long)
+        pdf.set_font("Helvetica", '', 9)
+        pdf.cell(35, 6, "Course Name:")
+        name_x = pdf.get_x()
+        name_width = 190 - name_x   # remaining width (approx)
+        pdf.multi_cell(name_width, 6, course['name'], align='L', border=0)
+        pdf.ln(2)
+        # ----- END OF FIXED HEADER -----
+
+        # Table header
+        pdf.set_font("Helvetica", 'B', 9)
+        pdf.set_fill_color(230, 230, 230)
+        pdf.cell(10, 6, "S.No", border=1, align='C', fill=True)
+        pdf.cell(130, 6, "Details", border=1, align='C', fill=True)
+        pdf.cell(50, 6, "Comments", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True)
+
+        # Question rows
+        pdf.set_font("Helvetica", '', 9)
+        for idx, (q, h) in enumerate(questions, 1):
+            sx, sy = pdf.get_x(), pdf.get_y()
+            pdf.cell(10, h, str(idx), border=1, align='C')
+            pdf.cell(130, h, "", border=1, align='C') 
+            pdf.set_xy(sx + 10, sy + (1 if h == 12 else 1)) 
+            pdf.multi_cell(130, 5, q, border=0, align='L')
+            pdf.set_xy(sx + 140, sy)
+            if idx == 13: 
+                pdf.cell(16.6, h, "H", border=1, align='C')
+                pdf.cell(16.7, h, "N", border=1, align='C')
+                pdf.cell(16.7, h, "SS", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+            else: 
+                pdf.cell(25, h, "Yes", border=1, align='C')
+                pdf.cell(25, h, "No", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
+
+        # Comments section
         sx, sy = pdf.get_x(), pdf.get_y()
-    pdf.cell(10, h_15, "15.", border=1, align='C')
-    pdf.cell(180, h_15, "", border=1, align='C')
-    pdf.set_xy(sx + 10, sy + 2)
-    pdf.multi_cell(180, 5, "Comments (Change of any Questions / Rejection of Question Paper):", border=0, align='L')
-    pdf.set_y(sy + h_15)
-    pdf.ln(3)
+        h_15 = 16
+        if sy + h_15 > 270:
+            pdf.add_page()
+            sx, sy = pdf.get_x(), pdf.get_y()
+        pdf.cell(10, h_15, "15.", border=1, align='C')
+        pdf.cell(180, h_15, "", border=1, align='C')
+        pdf.set_xy(sx + 10, sy + 2)
+        pdf.multi_cell(180, 5, "Comments (Change of any Questions / Rejection of Question Paper):", border=0, align='L')
+        pdf.set_y(sy + h_15)
+        pdf.ln(3)
 
-    pdf.set_font("Helvetica", 'I', 8)
-    pdf.multi_cell(0, 4, "All the above said items are verified and suitable modification/corrections were made in the given hard copy of the question paper.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.set_font("Helvetica", 'B', 8)
-    pdf.multi_cell(0, 4, "Declaration: I will not discuss or disclose anything related to this audit to anyone and none of my family member(s) and relative(s) are appearing for the examination.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(8)
-    pdf.set_font("Helvetica", 'B', 9)
-    pdf.cell(0, 5, "Signature of the Scrutiny Member", align='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.ln(4)
-    pdf.cell(0, 5, str(fac['name']), align='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_font("Helvetica", 'I', 8)
+        pdf.multi_cell(0, 4, "All the above said items are verified and suitable modification/corrections were made in the given hard copy of the question paper.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_font("Helvetica", 'B', 8)
+        pdf.multi_cell(0, 4, "Declaration: I will not discuss or disclose anything related to this audit to anyone and none of my family member(s) and relative(s) are appearing for the examination.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(8)
+        pdf.set_font("Helvetica", 'B', 9)
+        pdf.cell(0, 5, "Signature of the Scrutiny Member", align='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(4)
+        pdf.cell(0, 5, str(fac['name']), align='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # Page 3
+    # ==================== SUMMARY PAGE (original page 3) ====================
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 9)
     pdf.cell(0, 5, f"SCRUTINY OF QUESTION PAPER(S) - {str(r['session_name']).upper()} {r['session_year']}", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
@@ -1222,7 +1253,18 @@ def download_practical_claim():
 @app.route('/valuation_index')
 def valuation_index():
     if 'user' not in session: return redirect(url_for('index'))
-    return render_template('valuation_index.html')
+    
+    db = get_db()
+    c = db.cursor(dictionary=True)
+    
+    # Fetch all sessions created so far
+    c.execute("SELECT * FROM val_sessions ORDER BY created_at DESC")
+    existing_sessions = c.fetchall()
+    
+    db.close()
+    
+    # Pass 'sessions' to the template
+    return render_template('valuation_index.html', sessions=existing_sessions)
 
 @app.route('/valuation_setup/<val_type>', methods=['GET', 'POST'])
 def valuation_setup(val_type):
@@ -1255,174 +1297,229 @@ def valuation_phases(session_id):
 def valuation_hub(phase_id):
     if 'user' not in session: return redirect(url_for('index'))
     db = get_db(); c = db.cursor(dictionary=True)
+    
     c.execute("SELECT * FROM val_subjects WHERE phase_id=%s", (phase_id,))
     subjects = c.fetchall()
+    
     c.execute("SELECT * FROM val_examiners WHERE phase_id=%s", (phase_id,))
-    raw_examiners = c.fetchall(); db.close()
-    return render_template('valuation_hub.html', phase_id=phase_id, subjects=subjects, examiner_count=len(raw_examiners))
-
+    examiners = c.fetchall()
+    
+    # Optional: Format the JSON for display
+    for ex in examiners:
+        try:
+            # Parse it and re-dump it with indentation
+            ex['display_json'] = json.dumps(json.loads(ex['allocations_json']), indent=2)
+        except:
+            ex['display_json'] = ex['allocations_json']
+            
+    db.close()
+    return render_template('valuation_hub.html', phase_id=phase_id, subjects=subjects, examiners=examiners)
 @app.route('/upload_val_subjects/<int:phase_id>', methods=['POST'])
 def upload_val_subjects(phase_id):
     if 'file' not in request.files: return redirect(request.url)
-    df = pd.read_excel(request.files['file']); db = get_db(); c = db.cursor()
-    for _, row in df.iterrows():
-        c.execute("""INSERT INTO val_subjects (phase_id, exam_date, session_fn_an, department, course_code, course_name, valuation_strength, dummy_number_start) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (phase_id, clean_str(row.iloc[0]), clean_str(row.iloc[1]), clean_str(row.iloc[2]), clean_str(row.iloc[3]), clean_str(row.iloc[4]), clean_str(row.iloc[5]), clean_str(row.iloc[6])))
-    db.commit(); db.close(); flash("Subjects uploaded successfully!", "success")
-    return redirect(url_for('valuation_hub', phase_id=phase_id))
+    file = request.files['file']
+    
+    try:
+        df = pd.read_excel(file)
+        db = get_db(); c = db.cursor()
+        
+        # Clear previous to prevent duplicates
+        c.execute("DELETE FROM val_subjects WHERE phase_id=%s", (phase_id,))
 
+        for _, row in df.iterrows():
+            # Mandatory 6 columns
+            session_val = clean_str(row.iloc[0])
+            date_val    = clean_str(row.iloc[1])
+            dept_val    = clean_str(row.iloc[2])
+            code_val    = clean_str(row.iloc[3])
+            name_val    = clean_str(row.iloc[4])
+            strength    = clean_str(row.iloc[5])
+
+            # Optional 7th column (Dummy Start)
+            dummy_start = clean_str(row.iloc[6]) if len(row) > 6 else ""
+
+            c.execute("""INSERT INTO val_subjects 
+                         (phase_id, exam_date, session_fn_an, department, 
+                          course_code, course_name, valuation_strength, dummy_number_start) 
+                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                      (phase_id, date_val, session_val, dept_val, code_val, name_val, strength, dummy_start))
+
+        db.commit(); db.close()
+        flash(f"Uploaded {len(df)} subjects successfully!", "success")
+    except Exception as e:
+        flash(f"Error: {str(e)}", "danger")
+    return redirect(url_for('valuation_hub', phase_id=phase_id))
 @app.route('/upload_val_examiners/<int:phase_id>', methods=['POST'])
 def upload_val_examiners(phase_id):
     if 'file' not in request.files: return redirect(request.url)
-    df = pd.read_excel(request.files['file'])
+    file = request.files['file']
+    df = pd.read_excel(file, header=None)
     
     db = get_db(); c = db.cursor()
     c.execute("DELETE FROM val_examiners WHERE phase_id=%s", (phase_id,)) 
     
-    current_staff = {}
-    allocs_by_staff = {}
-    staff_order = []
-    
-    current_d1_date = ""
-    current_d2_date = ""
-    current_d3_date = ""
+    staff_list = []
+    current_staff = None
+    category = "Internal"
 
-    for _, row in df.iterrows():
-        name = str(row.get('Examiner Name', '')).strip()
+    # --- NEW: Capture Dates from the Headers ---
+    # Based on your file: Day 1 Date is at row index 2, col 5 (F3)
+    # Day 2 is at col 9, Day 3 is at col 13...
+    row_header_dates = df.iloc[2].tolist()
+    day_dates = {}
+    for d_num in range(1, 7):
+        col_idx = 5 + (d_num - 1) * 4
+        if col_idx < len(row_header_dates):
+            d_val = str(row_header_dates[col_idx]).strip()
+            day_dates[d_num] = d_val if d_val != 'nan' else f"Day {d_num}"
+
+    for idx, row in df.iterrows():
+        if idx < 5: continue # Skip the top header area
         
-        if name and name.lower() != 'nan':
+        row_list = [str(x).strip() for x in row.tolist()]
+        row_str = " ".join(row_list).lower()
+
+        if "external examiners" in row_str:
+            category = "External"
+            continue
+        if "internal examiners" in row_str or "s. no" in row_str: continue
+
+        # Check for Staff Name (Col index 1)
+        name_val = row_list[1]
+        if name_val != 'nan' and name_val != "" and not name_val.replace('.', '').isdigit():
             current_staff = {
-                'name': name,
-                'inst': str(row.get('Institution', '')),
-                'mob': str(row.get('Mobile', '')),
-                'email': str(row.get('Email', ''))
+                'name': name_val,
+                'college': row_list[2] if row_list[2] != 'nan' else "",
+                'mobile': row_list[3] if row_list[3] != 'nan' else "",
+                'email': row_list[4] if row_list[4] != 'nan' else "",
+                'category': category,
+                'allocs': []
             }
-            if name not in allocs_by_staff:
-                allocs_by_staff[name] = []
-                staff_order.append(name)
-            current_d1_date = ""
-            current_d2_date = ""
-            current_d3_date = ""
+            staff_list.append(current_staff)
 
-        if not current_staff.get('name'): continue
-        active_name = current_staff['name']
+        if not current_staff: continue
 
-        if str(row.get('Day 1 Date', '')).strip() and str(row.get('Day 1 Date', '')).lower() != 'nan':
-            current_d1_date = str(row.get('Day 1 Date', '')).strip()
-        if str(row.get('Day 2 Date', '')).strip() and str(row.get('Day 2 Date', '')).lower() != 'nan':
-            current_d2_date = str(row.get('Day 2 Date', '')).strip()
-        if str(row.get('Day 3 Date', '')).strip() and str(row.get('Day 3 Date', '')).lower() != 'nan':
-            current_d3_date = str(row.get('Day 3 Date', '')).strip()
-
-        if current_d1_date:
-            d1_fn_c = str(row.get('Day 1 FN Course', '')).strip()
-            d1_fn_s = str(row.get('Day 1 FN Scripts', '')).strip()
-            if d1_fn_c and d1_fn_c.lower() != 'nan' and str(d1_fn_s).replace('.','').isdigit():
-                allocs_by_staff[active_name].append({'date': current_d1_date, 'session': 'FN', 'course': d1_fn_c.upper(), 'scripts': int(float(d1_fn_s))})
-            d1_an_c = str(row.get('Day 1 AN Course', '')).strip()
-            d1_an_s = str(row.get('Day 1 AN Scripts', '')).strip()
-            if d1_an_c and d1_an_c.lower() != 'nan' and str(d1_an_s).replace('.','').isdigit():
-                allocs_by_staff[active_name].append({'date': current_d1_date, 'session': 'AN', 'course': d1_an_c.upper(), 'scripts': int(float(d1_an_s))})
-
-        if current_d2_date:
-            d2_fn_c = str(row.get('Day 2 FN Course', '')).strip()
-            d2_fn_s = str(row.get('Day 2 FN Scripts', '')).strip()
-            if d2_fn_c and d2_fn_c.lower() != 'nan' and str(d2_fn_s).replace('.','').isdigit():
-                allocs_by_staff[active_name].append({'date': current_d2_date, 'session': 'FN', 'course': d2_fn_c.upper(), 'scripts': int(float(d2_fn_s))})
-            d2_an_c = str(row.get('Day 2 AN Course', '')).strip()
-            d2_an_s = str(row.get('Day 2 AN Scripts', '')).strip()
-            if d2_an_c and d2_an_c.lower() != 'nan' and str(d2_an_s).replace('.','').isdigit():
-                allocs_by_staff[active_name].append({'date': current_d2_date, 'session': 'AN', 'course': d2_an_c.upper(), 'scripts': int(float(d2_an_s))})
-
-        if current_d3_date:
-            d3_fn_c = str(row.get('Day 3 FN Course', '')).strip()
-            d3_fn_s = str(row.get('Day 3 FN Scripts', '')).strip()
-            if d3_fn_c and d3_fn_c.lower() != 'nan' and str(d3_fn_s).replace('.','').isdigit():
-                allocs_by_staff[active_name].append({'date': current_d3_date, 'session': 'FN', 'course': d3_fn_c.upper(), 'scripts': int(float(d3_fn_s))})
-            d3_an_c = str(row.get('Day 3 AN Course', '')).strip()
-            d3_an_s = str(row.get('Day 3 AN Scripts', '')).strip()
-            if d3_an_c and d3_an_c.lower() != 'nan' and str(d3_an_s).replace('.','').isdigit():
-                allocs_by_staff[active_name].append({'date': current_d3_date, 'session': 'AN', 'course': d3_an_c.upper(), 'scripts': int(float(d3_an_s))})
+        # Process 6 Days
+        col_start = 5
+        for day_idx in range(1, 7): 
+            base_col = col_start + (day_idx - 1) * 4
+            if base_col + 3 >= len(row_list): break
             
-    s_no = 1
-    for staff_name in staff_order:
-        if not allocs_by_staff[staff_name]: continue 
-        c.execute("""INSERT INTO val_examiners (phase_id, s_no, staff_name, college_address, mobile, email, allocations_json) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (phase_id, str(s_no), staff_name, "", "", "", json.dumps(allocs_by_staff[staff_name])))
-        s_no += 1
+            # Use the date we captured from the header above
+            current_date = day_dates.get(day_idx, "N/A")
+
+            for session_offset, s_type in [(0, 'FN'), (2, 'AN')]:
+                c_cell = row_list[base_col + session_offset]
+                s_cell = row_list[base_col + session_offset + 1]
+
+                if c_cell != 'nan' and c_cell != "" and c_cell != "-":
+                    course_list = [x.strip() for x in re.split(r'[,/&\n]', c_cell) if x.strip()]
+                    script_list = [x.strip() for x in re.split(r'[,/&\n]', s_cell) if x.strip()]
+
+                    for i, code in enumerate(course_list):
+                        try:
+                            count = int(float(script_list[i])) if i < len(script_list) else int(float(script_list[0]))
+                        except: count = 0
+                        
+                        current_staff['allocs'].append({
+                            'date': current_date, # STORES THE HEADER DATE HERE
+                            'session': s_type,
+                            'course': code.upper(),
+                            'scripts': count
+                        })
+
+    # Save to DB
+    for s_no, staff in enumerate(staff_list, 1):
+        if not staff['allocs']: continue
+        final_json = {'category': staff['category'], 'data': staff['allocs']}
+        c.execute("""INSERT INTO val_examiners 
+                     (phase_id, s_no, staff_name, college_address, mobile, email, allocations_json) 
+                     VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                  (phase_id, str(s_no), staff['name'], staff['college'], 
+                   staff['mobile'], staff['email'], json.dumps(final_json)))
             
     db.commit(); db.close()
-    flash("Examiner Allocations formatted and uploaded successfully!", "success")
+    flash(f"Extracted {len(staff_list)} Examiners with Header Dates!", "success")
     return redirect(url_for('valuation_hub', phase_id=phase_id))
-
 @app.route('/edit_val_examiners/<int:phase_id>', methods=['GET', 'POST'])
 def edit_val_examiners(phase_id):
     if 'user' not in session: return redirect(url_for('index'))
-    db = get_db(); c = db.cursor(dictionary=True)
+    db = get_db()
+    c = db.cursor(dictionary=True)
+    
     if request.method == 'POST':
+        # Loop through all form keys to find both names and allocations
         for key, val in request.form.items():
             if key.startswith('alloc_'):
                 ex_id = key.split('_')[1]
+                # Update JSON allocations
                 c.execute("UPDATE val_examiners SET allocations_json=%s WHERE id=%s", (val, ex_id))
-        db.commit(); flash("Examiner allocations updated!", "success")
+            
+            if key.startswith('name_'):
+                ex_id = key.split('_')[1]
+                # Update Staff Name
+                c.execute("UPDATE val_examiners SET staff_name=%s WHERE id=%s", (val, ex_id))
+        
+        db.commit()
+        flash("Examiner names and allocations updated successfully!", "success")
         return redirect(url_for('edit_val_examiners', phase_id=phase_id))
         
     c.execute("SELECT * FROM val_examiners WHERE phase_id=%s ORDER BY id", (phase_id,))
     examiners = c.fetchall()
-    for ex in examiners: ex['alloc_text'] = json.dumps(json.loads(ex['allocations_json']), indent=2)
+    for ex in examiners: 
+        ex['alloc_text'] = json.dumps(json.loads(ex['allocations_json']), indent=2)
+    
     db.close()
     return render_template('edit_val_examiners.html', phase_id=phase_id, examiners=examiners)
 
 def compute_all_packets(phase_id):
     db = get_db(); c = db.cursor(dictionary=True)
-    c.execute("SELECT * FROM val_subjects WHERE phase_id=%s", (phase_id,))
-    subjects = {str(s['course_code']).strip().upper(): s for s in c.fetchall()}
+    c.execute("SELECT course_code, course_name, degree_type FROM course_master")
+    cm_map = {str(r['course_code']).strip().upper(): r for r in c.fetchall()}
+
+    c.execute("SELECT course_code, dummy_number_start FROM val_subjects WHERE phase_id=%s", (phase_id,))
+    subjects_val_map = {}
+    for s in c.fetchall():
+        code = str(s['course_code']).strip().upper()
+        val = str(s['dummy_number_start']).strip()
+        subjects_val_map[code] = int(re.sub(r'\D', '', val)) if val and any(i.isdigit() for i in val) else None
     
     c.execute("SELECT * FROM val_examiners WHERE phase_id=%s ORDER BY id", (phase_id,))
     examiners = c.fetchall(); db.close()
     
-    course_trackers = {}
-    for code, s in subjects.items():
-        try: d_start = int(re.sub(r'\D', '', str(s['dummy_number_start'])))
-        except: d_start = 1000000
-        course_trackers[code] = {'dummy': d_start, 'packet_no': 1}
-        
-    all_packets = []
-    
+    trackers, all_packets = {}, []
     for ex in examiners:
-        allocs = json.loads(ex['allocations_json'])
-        for alloc in allocs:
-            code = alloc['course']
-            count = alloc['scripts']
-            eval_date = alloc['date']
-            
-            if count <= 0: continue
-            if code not in course_trackers: course_trackers[code] = {'dummy': 1000000, 'packet_no': 1}
-            tracker = course_trackers[code]
-            
-            chunks = []
-            c_left = count
-            while c_left > 35:
-                chunks.append(30)
-                c_left -= 30
-            if c_left > 0:
-                chunks.append(c_left)
-                
-            for chunk in chunks:
-                start_d = tracker['dummy']
-                end_d = start_d + chunk - 1
-                all_packets.append({
-                    'examiner_id': ex['id'], 'staff_name': ex['staff_name'],
-                    'course_code': code, 'course_name': subjects.get(code, {}).get('course_name', '-'),
-                    'date': eval_date,
-                    'packet_no': tracker['packet_no'], 'scripts': chunk,
-                    'dummy_range': f"{start_d} - {end_d}"
-                })
-                tracker['dummy'] = end_d + 1
-                tracker['packet_no'] += 1
-                
-    return all_packets
+        try:
+            full_json = json.loads(ex['allocations_json'])
+            # Handle new format: {"category": "...", "data": [...]}
+            allocs = full_json['data'] if isinstance(full_json, dict) else full_json
+            staff_cat = full_json.get('category', 'Internal') if isinstance(full_json, dict) else 'Internal'
 
+            for a in allocs:
+                code = str(a['course']).strip().upper()
+                if a['scripts'] <= 0: continue
+                if code not in trackers:
+                    trackers[code] = {'dummy': subjects_val_map.get(code), 'packet': 1}
+                
+                course_info = cm_map.get(code, {'course_name': f"Course {code}", 'degree_type': 'B.E.'})
+                rem = a['scripts']
+                while rem > 0:
+                    chunk = 30 if rem > 35 else rem 
+                    d_range = ""
+                    if trackers[code]['dummy'] is not None:
+                        d_range = f"{trackers[code]['dummy']} - {trackers[code]['dummy'] + chunk - 1}"
+                        trackers[code]['dummy'] += chunk
+                    
+                    all_packets.append({
+                        'examiner_id': ex['id'], 'staff_name': ex['staff_name'],
+                        'staff_category': staff_cat, 'course_code': code, 
+                        'course_name': course_info['course_name'], 'degree': course_info['degree_type'],
+                        'date': a.get('date', 'N/A'), 'packet_no': trackers[code]['packet'],
+                        'scripts': chunk, 'dummy_range': d_range
+                    })
+                    trackers[code]['packet'] += 1; rem -= chunk
+        except: continue
+    return all_packets
 @app.route('/issue_register_hub/<int:phase_id>')
 def issue_register_hub(phase_id):
     if 'user' not in session: return redirect(url_for('index'))
@@ -1451,99 +1548,111 @@ def preview_issue_register(phase_id):
 
 @app.route('/download_issue_register/<int:phase_id>', methods=['POST'])
 def download_issue_register(phase_id):
+    if 'user' not in session: return redirect(url_for('index'))
+    
     fac_id = request.form.get('faculty_id')
-    db = get_db(); c = db.cursor(dictionary=True)
+    db = get_db()
+    c = db.cursor(dictionary=True)
+    
+    # 1. Fetch Faculty details
     c.execute("SELECT * FROM faculty_master WHERE faculty_id=%s", (fac_id,))
     fac = c.fetchone()
     
-    c.execute("""SELECT s.session_name, s.session_year FROM val_phases p 
-                 JOIN val_sessions s ON p.session_id = s.id WHERE p.id=%s""", (phase_id,))
+    # 2. Fetch Session Info (Fixing the column name error)
+    c.execute("""SELECT s.type, s.academic_year 
+                 FROM val_phases p 
+                 JOIN val_sessions s ON p.session_id = s.id 
+                 WHERE p.id=%s""", (phase_id,))
     sess_info = c.fetchone()
+    
+    # 3. Fetch allocations using the helper function
+    all_packets = compute_all_packets(phase_id)
+    # Clean names for fuzzy matching (removes dots and spaces)
+    def simple_clean(n): return str(n).lower().replace('.', '').replace(' ', '')
+    
+    fac_name_clean = simple_clean(fac['name']) if fac else ""
+    my_packets = [p for p in all_packets if fac_name_clean in simple_clean(p['staff_name'])]
+    
     db.close()
     
-    all_packets = compute_all_packets(phase_id)
-    fac_name_clean = fac['name'].lower().replace('.', '').replace(' ', '')
-    my_packets = [p for p in all_packets if fac_name_clean in p['staff_name'].lower().replace('.', '').replace(' ', '') or p['staff_name'].lower().replace('.', '').replace(' ', '') in fac_name_clean]
-    
+    if not fac or not my_packets:
+        flash("No valuation data found for this faculty member.", "warning")
+        return redirect(url_for('issue_register_hub', phase_id=phase_id))
+
+    # 4. PDF Generation
     pdf = CustomPDF(orientation='L', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
+    # Header Section
     pdf.set_font("Helvetica", 'B', 11)
-    sess_title = f"{sess_info['session_name']} {sess_info['session_year']}" if sess_info else "NOV/DEC 2025"
-    pdf.cell(0, 6, f"VALUATION / REVALUATION - {sess_title}", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.set_text_color(150, 0, 0)
+    val_type = (sess_info['type'] or "CENTRAL").upper()
+    ac_yr = sess_info['academic_year'] or "2025-2026"
+    pdf.cell(0, 6, f"{val_type} VALUATION / REVALUATION - {ac_yr}", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.set_text_color(150, 0, 0) # Red Title
     pdf.cell(0, 6, "Issue Register", align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_text_color(0, 0, 0)
     pdf.ln(4)
     
+    # Faculty Info Header
     pdf.set_font("Helvetica", 'B', 9)
     pdf.cell(35, 6, "Faculty Code"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {fac['faculty_id']}")
-    pdf.set_font("Helvetica", 'B', 9); pdf.cell(30, 6, "Valuation"); pdf.set_font("Helvetica", '', 9); pdf.cell(60, 6, f": Central Valuation", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", 'B', 9); pdf.cell(30, 6, "Valuation"); pdf.set_font("Helvetica", '', 9); pdf.cell(60, 6, f": Central", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
-    pdf.set_font("Helvetica", 'B', 9); pdf.cell(35, 6, "Examiner Name"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {fac['name']}")
+    pdf.set_font("Helvetica", 'B', 9); pdf.cell(35, 6, "Examiner Name"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {clean_pdf_text(fac['name'])}")
     pdf.set_font("Helvetica", 'B', 9); pdf.cell(30, 6, "Mobile"); pdf.set_font("Helvetica", '', 9); pdf.cell(60, 6, f": {fac['mobile_number']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
-    pdf.set_font("Helvetica", 'B', 9); pdf.cell(35, 6, "Designation"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {fac['designation']}")
+    pdf.set_font("Helvetica", 'B', 9); pdf.cell(35, 6, "Designation"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {clean_pdf_text(fac['designation'])}")
     pdf.set_font("Helvetica", 'B', 9); pdf.cell(30, 6, "Department"); pdf.set_font("Helvetica", '', 9); pdf.cell(60, 6, f": {fac['department']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
-    pdf.set_font("Helvetica", 'B', 9); pdf.cell(35, 6, "Institution"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {fac['institution_address']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", 'B', 9); pdf.cell(35, 6, "Institution"); pdf.set_font("Helvetica", '', 9); pdf.cell(140, 6, f": {clean_pdf_text(fac['institution_address'])}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(4)
     
-    w = [12, 22, 25, 80, 18, 45, 18, 22, 28] 
-    headers = ["S No", "Date", "Course Code", "Course Name", "Packet No.", "Dummy Number(s)", "Scripts", "Cum. Total", "Signature"]
-    pdf.set_fill_color(230, 230, 230)
-    pdf.set_font("Helvetica", 'B', 9)
+    # Table Setup
+    w = [10, 22, 25, 85, 18, 45, 18, 22, 30] 
+    headers = ["S.No", "Date", "Course Code", "Course Name", "Packet", "Dummy Range", "Scripts", "Cum.Total", "Signature"]
+    
+    pdf.set_fill_color(230, 230, 230); pdf.set_font("Helvetica", 'B', 9)
     for i, h in enumerate(headers): pdf.cell(w[i], 8, h, 1, 0, 'C', fill=True)
     pdf.ln()
     
+    # Table Data
     pdf.set_font("Helvetica", '', 8)
     cum_total = 0
     for idx, p in enumerate(my_packets, 1):
         cum_total += p['scripts']
-        startX = pdf.get_x(); startY = pdf.get_y()
-        row_h = 10
-        if startY + row_h > 180:
+        row_h = 10 # Default height
+        
+        # Determine if row needs to be taller for wrapped text
+        if pdf.get_string_width(p['course_name']) > w[3] - 2: row_h = 12
+        
+        if pdf.get_y() + row_h > 185: # Page break logic
             pdf.add_page(orientation='L')
             pdf.set_font("Helvetica", 'B', 9)
             for i, h in enumerate(headers): pdf.cell(w[i], 8, h, 1, 0, 'C', fill=True)
-            pdf.ln()
-            pdf.set_font("Helvetica", '', 8)
-            startX = pdf.get_x(); startY = pdf.get_y()
-            
-        for width in w:
-            pdf.rect(pdf.get_x(), pdf.get_y(), width, row_h)
-            pdf.set_x(pdf.get_x() + width)
-        pdf.set_xy(startX, startY)
+            pdf.ln(); pdf.set_font("Helvetica", '', 8)
+
+        startX, startY = pdf.get_x(), pdf.get_y()
+        pdf.cell(w[0], row_h, str(idx), 1, 0, 'C')
+        pdf.cell(w[1], row_h, str(p['date']), 1, 0, 'C')
+        pdf.cell(w[2], row_h, str(p['course_code']), 1, 0, 'C')
         
-        pdf.cell(w[0], row_h, str(idx), 0, 0, 'C')
-        pdf.cell(w[1], row_h, str(p['date'])[:10], 0, 0, 'C')
-        pdf.cell(w[2], row_h, str(p['course_code']), 0, 0, 'C')
+        # Wrapped Course Name Cell
+        nx, ny = pdf.get_x(), pdf.get_y()
+        pdf.cell(w[3], row_h, '', 1, 0) 
+        pdf.set_xy(nx, ny + (1 if row_h==10 else 0.5))
+        pdf.multi_cell(w[3], 4, clean_pdf_text(p['course_name']), 0, 'L')
+        pdf.set_xy(nx + w[3], ny)
         
-        pdf.set_xy(startX + sum(w[:3]), startY + (0.5 if len(str(p['course_name']))>45 else 2.5))
-        pdf.multi_cell(w[3], 4.5, f" {p['course_name']}", 0, 'L')
-        
-        pdf.set_xy(startX + sum(w[:4]), startY)
-        pdf.cell(w[4], row_h, str(p['packet_no']), 0, 0, 'C')
-        pdf.cell(w[5], row_h, str(p['dummy_range']), 0, 0, 'C')
-        pdf.cell(w[6], row_h, str(p['scripts']), 0, 0, 'C')
-        pdf.cell(w[7], row_h, str(cum_total), 0, 0, 'C')
-        pdf.cell(w[8], row_h, "", 0, 1, 'C') 
-        pdf.set_y(startY + row_h)
-        
-    for idx in range(len(my_packets)+1, 16):
-        if pdf.get_y() + 8 > 180:
-            pdf.add_page(orientation='L')
-            pdf.set_font("Helvetica", 'B', 9)
-            for i, h in enumerate(headers): pdf.cell(w[i], 8, h, 1, 0, 'C', fill=True)
-            pdf.ln()
-            pdf.set_font("Helvetica", '', 8)
-        for width in w: pdf.cell(width, 8, "", 1, 0, 'C')
-        pdf.ln()
-        
+        pdf.cell(w[4], row_h, str(p['packet_no']), 1, 0, 'C')
+        pdf.cell(w[5], row_h, str(p['dummy_range']), 1, 0, 'C')
+        pdf.cell(w[6], row_h, str(p['scripts']), 1, 0, 'C')
+        pdf.cell(w[7], row_h, str(cum_total), 1, 0, 'C')
+        pdf.cell(w[8], row_h, "", 1, 1, 'C') 
+
+    # Footer
     pdf.ln(10)
-    if pdf.get_y() + 6 > 180:
-        pdf.add_page(orientation='L')
     pdf.set_font("Helvetica", 'B', 10)
     pdf.cell(0, 6, "Controller of Examinations", align='R', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
@@ -1551,7 +1660,6 @@ def download_issue_register(phase_id):
     pdf.output(output)
     output.seek(0)
     return send_file(output, as_attachment=True, download_name=f"Issue_Register_{fac_id}.pdf", mimetype='application/pdf')
-
 # ==========================================
 # 7. MANAGEMENT, REPORTS & TEMPLATES
 # ==========================================
@@ -1584,31 +1692,65 @@ def download_template():
     if 'user' not in session: return redirect(url_for('index'))
     t_type = request.args.get('type')
     
-    if t_type == 'course':
+    output = io.BytesIO()
+    
+    if t_type == 'val_allocations':
+        # Create the exact structure of Book2 .1(1).xlsx
+        # Row 1: Title
+        # Row 2: Examiner Type Header
+        # Row 3: Main Headers
+        # Row 4: Sub-Headers (Course/Scripts)
+        # Row 5: Session Headers (FN/AN)
+        
+        data = [
+            ["Nov / Dec 2025 Autonomous Central Valuation"] + [""]*16,
+            ["Internal Examiners"] + [""]*16,
+            ["S. No", "Name of the Staff", "Name & Address of the College", "Mobile Number", "Email-ID", "Day 1", "", "", "", "Day 2", "", "", "", "Day 3", "", "", "", "Total Scripts"],
+            ["", "", "", "", "", "Course Code / No.of Scripts", "", "", "", "Course Code / No.of Scripts", "", "", "", "Course Code / No.of Scripts", "", "", ""],
+            ["", "", "", "", "", "FN", "", "AN", "", "FN", "", "AN", "", "FN", "", "AN", ""]
+        ]
+        
+        df = pd.DataFrame(data)
+        filename = 'Examiner_Allocations_Template.xlsx'
+        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, header=False)
+            # Access the workbook to handle cell merging for a perfect template
+            worksheet = writer.sheets['Sheet1']
+            # Basic formatting to make it look like a template
+            worksheet.merge_cells('A1:Q1') # Main Title
+            worksheet.merge_cells('A2:Q2') # Internal Section
+            # Day 1 merges (F to I)
+            worksheet.merge_cells('F3:I3') 
+            worksheet.merge_cells('F4:I4')
+            # Day 2 merges (J to M)
+            worksheet.merge_cells('J3:M3')
+            worksheet.merge_cells('J4:M4')
+            # Day 3 merges (N to Q)
+            worksheet.merge_cells('N3:Q3')
+            worksheet.merge_cells('N4:Q4')
+
+    elif t_type == 'val_subjects':
+        df = pd.DataFrame(columns=['SESSION', 'DATE', 'DEPARTMENT', 'COURSE CODE', 'COURSE NAME', 'VALUVATION STRENGTH', 'DUMMY START'])
+        filename = 'Valuation_Subjects_Template.xlsx'
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+            
+    elif t_type == 'course':
         df = pd.DataFrame(columns=['Course Code', 'Course Name', 'Department', 'Regulation', 'Semester'])
         filename = 'Course_Master_Template.xlsx'
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+            
     elif t_type == 'faculty':
         df = pd.DataFrame(columns=['Faculty ID', 'Faculty Name', 'Designation', 'Department', 'Institution Address', 'Mobile Number', 'Email Address', 'Bank Name', 'Account Number', 'IFSC Code', 'Branch Name', 'Place', 'Distance', 'Category', 'Bank Type'])
         filename = 'Faculty_Master_Template.xlsx'
-    elif t_type == 'val_subjects':
-        df = pd.DataFrame(columns=['Exam Date', 'Session FN/AN', 'Department', 'Course Code', 'Course Name', 'Valuation Strength', 'Dummy Number Start'])
-        filename = 'Valuation_Subjects_Template.xlsx'
-    elif t_type == 'val_allocations':
-        cols = ['S.No', 'Examiner Name', 'Institution', 'Mobile', 'Email',
-                'Day 1 Date', 'Day 1 FN Course', 'Day 1 FN Scripts', 'Day 1 AN Course', 'Day 1 AN Scripts',
-                'Day 2 Date', 'Day 2 FN Course', 'Day 2 FN Scripts', 'Day 2 AN Course', 'Day 2 AN Scripts',
-                'Day 3 Date', 'Day 3 FN Course', 'Day 3 FN Scripts', 'Day 3 AN Course', 'Day 3 AN Scripts']
-        df = pd.DataFrame(columns=cols)
-        filename = 'Examiner_Allocations_Template.xlsx'
-    elif t_type == 'prac_schedule':
-        df = pd.DataFrame(columns=['S.No', 'Date of Exam', 'Degree', 'Programme', 'Semester', 'Course Code', 'Course Title', 'Duration', 'Board', 'Total Candidates', 'Internal Examiner Name', 'External Examiner Details', 'Skilled Assistant Name'])
-        filename = 'Practical_Schedule_Template.xlsx'
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+            
     else: 
         return redirect(url_for('dashboard'))
     
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer: 
-        df.to_excel(writer, index=False)
     output.seek(0)
     return send_file(output, as_attachment=True, download_name=filename, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
@@ -1711,13 +1853,30 @@ def report():
     sess = session.get('active_sess'); yr = session.get('active_year'); reg = session.get('active_reg', '2022')
     cat = request.args.get('category', 'All'); bank = request.args.get('bank_type', 'All')
     db = get_db(); c = db.cursor(dictionary=True)
-    q = """SELECT s.faculty_id, MAX(s.scrutiny_date) as latest_date, SUM(s.courses_count) as total_qps, SUM(s.remuneration) as remuneration, SUM(s.ta_amount) as ta_amount, SUM(s.da_amount) as da_amount, SUM(s.grand_total) as grand_total, f.name, f.department, f.bank_name, f.account_number, f.ifsc, f.category, f.bank_type FROM scrutiny_records s LEFT JOIN faculty_master f ON s.faculty_id = f.faculty_id WHERE s.session_name=%s AND s.session_year=%s"""
+    
+    # ADDED MAX(s.id) as id below
+    q = """SELECT 
+            MAX(s.id) as id, 
+            s.faculty_id, 
+            MAX(s.scrutiny_date) as latest_date, 
+            SUM(s.courses_count) as total_qps, 
+            SUM(s.remuneration) as remuneration, 
+            SUM(s.ta_amount) as ta_amount, 
+            SUM(s.da_amount) as da_amount, 
+            SUM(s.grand_total) as grand_total, 
+            f.name, f.department, f.bank_name, f.account_number, f.ifsc, f.category, f.bank_type 
+        FROM scrutiny_records s 
+        LEFT JOIN faculty_master f ON s.faculty_id = f.faculty_id 
+        WHERE s.session_name=%s AND s.session_year=%s"""
+    
     p = [sess, yr]
     if cat != 'All': q += " AND f.category=%s"; p.append(cat)
     if bank != 'All': q += " AND f.bank_type=%s"; p.append(bank)
     q += " GROUP BY s.faculty_id, f.name, f.department, f.bank_name, f.account_number, f.ifsc, f.category, f.bank_type ORDER BY f.name ASC"
+    
     c.execute(q, tuple(p))
     recs = c.fetchall(); db.close()
+    # ... rest of your totals and return logic ...
     tot = {"remun": 0, "ta": 0, "da": 0, "grand": 0}; bank_abs = {}
     for r in recs:
         tot['remun'] += r['remuneration'] or 0; tot['ta'] += r['ta_amount'] or 0; tot['da'] += r['da_amount'] or 0; tot['grand'] += r['grand_total'] or 0
@@ -1746,6 +1905,264 @@ def api_search():
     c.execute("SELECT course_code, course_name FROM course_master WHERE course_code LIKE %s OR course_name LIKE %s LIMIT 10", (f"%{q}%", f"%{q}%"))
     res = c.fetchall(); db.close()
     return jsonify(res)
+@app.route('/delete_scrutiny/<int:sid>')
+def delete_scrutiny(sid):
+    if 'user' not in session: return redirect(url_for('index'))
+    db = get_db(); c = db.cursor(dictionary=True)
+    
+    # Find out who this belongs to before deleting
+    c.execute("SELECT faculty_id FROM scrutiny_records WHERE id=%s", (sid,))
+    res = c.fetchone()
+    
+    if res:
+        fid = res['faculty_id']
+        c.execute("DELETE FROM scrutiny_records WHERE id = %s", (sid,))
+        db.commit()
+        db.close()
+        flash("Claim deleted.", "warning")
+        return redirect(f"/faculty_history/{fid}") # Go back to history to see remaining
+    
+    db.close()
+    return redirect(url_for('report'))
+@app.route('/faculty_history/<fid>')
+def faculty_history(fid):
+    if 'user' not in session: return redirect(url_for('index'))
+    sess = session.get('active_sess')
+    yr = session.get('active_year')
+    
+    db = get_db()
+    c = db.cursor(dictionary=True)
+    
+    # Get Faculty Details
+    c.execute("SELECT * FROM faculty_master WHERE faculty_id=%s", (fid,))
+    fac = c.fetchone()
+    
+    # Get every individual claim for this faculty in this session
+    c.execute("""SELECT id, scrutiny_date, courses_count, grand_total, courses_json 
+                 FROM scrutiny_records 
+                 WHERE faculty_id=%s AND session_name=%s AND session_year=%s 
+                 ORDER BY scrutiny_date DESC""", (fid, sess, yr))
+    history = c.fetchall()
+    db.close()
+@app.route('/download_valuation_claim/<int:phase_id>', methods=['POST'])
+def download_valuation_claim(phase_id):
+    if 'user' not in session: return redirect(url_for('index'))
+    
+    fac_id = request.form.get('faculty_id')
+    db = get_db(); c = db.cursor(dictionary=True)
+    
+    # 1. Fetch Faculty details from Master
+    c.execute("SELECT * FROM faculty_master WHERE faculty_id=%s", (fac_id,))
+    fac = c.fetchone()
+    
+    # 2. Fetch Session Info for Header
+    c.execute("""SELECT s.type, s.academic_year FROM val_phases p 
+                 JOIN val_sessions s ON p.session_id = s.id WHERE p.id=%s""", (phase_id,))
+    sess_info = c.fetchone()
+    
+    # 3. Compute all packets and filter for this specific faculty
+    all_packets = compute_all_packets(phase_id)
+    my_packets = [p for p in all_packets if name_match(fac['name'], p['staff_name'])]
+    db.close()
 
+    if not fac or not my_packets:
+        flash("No valuation data found for this faculty member.", "warning")
+        return redirect(url_for('valuation_hub', phase_id=phase_id))
+
+    # 4. Process packets for grouping and TA dates
+    summary = {}
+    dates_set = set()
+    total_scripts = 0
+    total_remun = 0
+    
+    # Category detection from the specific allocation (Internal/External)
+    staff_category = my_packets[0].get('staff_category', 'Internal')
+
+    for p in my_packets:
+        # Group by course for Page 1 table
+        key = (p['course_code'], p['course_name'], p['degree'])
+        summary[key] = summary.get(key, 0) + p['scripts']
+        
+        # Collect work dates for Page 2 TA/DA table
+        if p.get('date') and p['date'] != 'N/A':
+            dates_set.add(p['date'])
+
+    # Prepare subjects list for side-by-side display
+    subjects_list = []
+    for (code, name, deg), qty in summary.items():
+        rate = 35 if "M.E" in str(deg).upper() else 25
+        amt = max(qty * rate, 200) # Govt logic: Min Rs. 200 per subject
+        subjects_list.append({'deg': deg, 'code': code, 'name': name, 'qty': qty, 'amt': amt})
+        total_scripts += qty
+        total_remun += amt
+
+    # 5. TA/DA Logic
+    dist = safe_float(fac['distance'])
+    is_ext = (staff_category == 'External')
+    sorted_dates = sorted(list(dates_set))
+    num_days = max(len(sorted_dates), 1)
+    
+    # External get Distance*12 (min 400), Internal get 0 TA
+    ta_amt = ((dist * 12) if dist >= 35 else 400) if is_ext else 0
+    # DA: External (300/200), Internal (150)
+    da_per_day = (300 if dist >= 35 else 200) if is_ext else 150
+    total_da = da_per_day * num_days
+    grand_total = total_remun + ta_amt + total_da
+
+    # 6. PDF Generation
+    pdf = CustomPDF(orientation='L', unit='mm', format='A4')
+    
+    # ==================== PAGE 1: REMUNERATION ====================
+    pdf.add_page()
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.cell(0, 5, f"{sess_info['type'].upper()} VALUATION - {sess_info['academic_year']}", align='C', ln=1)
+    pdf.cell(0, 5, "CLAIM FOR THE VALUATION OF ANSWER SCRIPTS", align='C', ln=1)
+    pdf.ln(5)
+
+    pdf.set_font("Helvetica", '', 8)
+    details = [
+        ("EXAMINER NAME", fac['name'], "BANK NAME", fac['bank_name']),
+        ("FACULTY ID", fac['faculty_id'], "ACCOUNT NO", fac['account_number']),
+        ("DESIGNATION", fac['designation'], "IFSC CODE", fac['ifsc']),
+        ("INSTITUTION", str(fac['institution_address'])[:60], "BRANCH", fac['branch_name'])
+    ]
+    for d in details:
+        pdf.set_font("Helvetica", 'B', 8); pdf.cell(35, 5, f"{d[0]} :"); 
+        pdf.set_font("Helvetica", '', 8); pdf.cell(100, 5, str(d[1]));
+        pdf.set_font("Helvetica", 'B', 8); pdf.cell(35, 5, f"{d[2]} :"); 
+        pdf.set_font("Helvetica", '', 8); pdf.cell(100, 5, str(d[3]), ln=1)
+
+    pdf.ln(4); pdf.set_font("Helvetica", 'B', 9); pdf.cell(0, 5, "Remuneration Details:", ln=1)
+    
+    # Dual Table Headers (Width Total = 270mm)
+    w = [8, 12, 20, 71, 10, 14] 
+    pdf.set_fill_color(230, 230, 230); pdf.set_font("Helvetica", 'B', 7)
+    for _ in range(2): 
+        pdf.cell(w[0], 6, "S.No", 1, 0, 'C', True); pdf.cell(w[1], 6, "Deg", 1, 0, 'C', True)
+        pdf.cell(w[2], 6, "Code", 1, 0, 'C', True); pdf.cell(w[3], 6, "Course Name", 1, 0, 'C', True)
+        pdf.cell(w[4], 6, "Qty", 1, 0, 'C', True); pdf.cell(w[5], 6, "Amt", 1, 0, 'C', True)
+    pdf.ln()
+
+    pdf.set_font("Helvetica", '', 7)
+    for i in range(10):
+        # Left Side (Subject 1-10)
+        if i < len(subjects_list):
+            s = subjects_list[i]
+            pdf.cell(w[0], 6, str(i+1), 1, 0, 'C'); pdf.cell(w[1], 6, s['deg'], 1, 0, 'C')
+            pdf.cell(w[2], 6, s['code'], 1, 0, 'C'); pdf.cell(w[3], 6, f" {s['name'][:48]}", 1, 0, 'L')
+            pdf.cell(w[4], 6, str(s['qty']), 1, 0, 'C'); pdf.cell(w[5], 6, str(s['amt']), 1, 0, 'C')
+        else:
+            for x in w: pdf.cell(x, 6, "", 1, 0)
+        
+        # Right Side (Subject 11-20)
+        idx_r = i + 10
+        if idx_r < len(subjects_list):
+            s = subjects_list[idx_r]
+            pdf.cell(w[0], 6, str(idx_r+1), 1, 0, 'C'); pdf.cell(w[1], 6, s['deg'], 1, 0, 'C')
+            pdf.cell(w[2], 6, s['code'], 1, 0, 'C'); pdf.cell(w[3], 6, f" {s['name'][:48]}", 1, 0, 'L')
+            pdf.cell(w[4], 6, str(s['qty']), 1, 0, 'C'); pdf.cell(w[5], 6, str(s['amt']), 1, 1, 'C')
+        else:
+            for x in w[:-1]: pdf.cell(x, 6, "", 1, 0)
+            pdf.cell(w[-1], 6, "", 1, 1)
+
+    pdf.set_font("Helvetica", 'B', 8)
+    pdf.cell(111, 7, "Total Answer Scripts Valuated:", 1, 0, 'R', True)
+    pdf.cell(24, 7, str(total_scripts), 1, 0, 'C', True)
+    pdf.cell(111, 7, "Total Remuneration Claim (Rs):", 1, 0, 'R', True)
+    pdf.cell(24, 7, str(total_remun), 1, 1, 'C', True)
+
+    pdf.ln(10)
+    pdf.cell(135, 5, "Signature of the Examiner", 0, 0, 'L')
+    pdf.cell(135, 5, "Controller of Examinations", 0, 1, 'R')
+
+    # ==================== PAGE 2: TA/DA BILL ====================
+    pdf.add_page()
+    pdf.set_font("Helvetica", 'B', 11)
+    pdf.cell(0, 7, "CLAIM BILL FOR TRAVELLING ALLOWANCE (TA) AND DAILY ALLOWANCE (DA)", align='C', ln=1)
+    pdf.ln(5)
+
+    pdf.set_font("Helvetica", 'B', 9)
+    pdf.cell(0, 6, "1. Travelling Allowance (TA) Details:", ln=1)
+    tw = [30, 50, 50, 25, 25, 30, 30] 
+    t_heads = ["Date", "From", "To", "Dist (km)", "Mode", "Rate", "Amount"]
+    pdf.set_fill_color(240, 240, 240)
+    for i, h in enumerate(t_heads): pdf.cell(tw[i], 8, h, 1, 0, 'C', True)
+    pdf.ln()
+
+    pdf.set_font("Helvetica", '', 9)
+    if is_ext:
+        ta_date = sorted_dates[0] if sorted_dates else datetime.now().strftime("%d-%m-%Y")
+        pdf.cell(tw[0], 8, str(ta_date), 1, 0, 'C')
+        pdf.cell(tw[1], 8, str(fac['place']), 1, 0, 'C')
+        pdf.cell(tw[2], 8, "GCE Salem", 1, 0, 'C')
+        pdf.cell(tw[3], 8, str(dist), 1, 0, 'C')
+        pdf.cell(tw[4], 8, "Road", 1, 0, 'C')
+        pdf.cell(tw[5], 8, "12.00", 1, 0, 'C')
+        pdf.cell(tw[6], 8, str(ta_amt), 1, 1, 'C')
+    else:
+        # Internal: List all work dates but set TA Amount to 0
+        for d in sorted_dates:
+            pdf.cell(tw[0], 8, str(d), 1, 0, 'C')
+            pdf.cell(tw[1], 8, "Local (Salem)", 1, 0, 'C')
+            pdf.cell(tw[2], 8, "GCE Salem", 1, 0, 'C')
+            pdf.cell(tw[3], 8, "0", 1, 0, 'C')
+            pdf.cell(tw[4], 8, "-", 1, 0, 'C')
+            pdf.cell(tw[5], 8, "0.00", 1, 0, 'C')
+            pdf.cell(tw[6], 8, "0", 1, 1, 'C')
+        pdf.set_font("Helvetica", 'I', 8)
+        pdf.cell(0, 5, "* Internal Faculty: Travelling Allowance not applicable.", ln=1)
+
+    pdf.ln(5)
+    pdf.set_font("Helvetica", 'B', 9); pdf.cell(0, 6, "2. Daily Allowance (DA) Details:", ln=1)
+    pdf.set_font("Helvetica", '', 9)
+    pdf.cell(60, 8, "Number of Days Valuated", 1, 0); pdf.cell(40, 8, str(num_days), 1, 1, 'C')
+    pdf.cell(60, 8, "DA Rate per Day (Rs)", 1, 0); pdf.cell(40, 8, str(da_per_day), 1, 1, 'C')
+    pdf.set_font("Helvetica", 'B', 9)
+    pdf.cell(60, 8, "Total DA Amount (Rs)", 1, 0, '', True); pdf.cell(40, 8, str(total_da), 1, 1, 'C', True)
+
+    pdf.ln(10); pdf.set_font("Helvetica", 'B', 12); pdf.set_fill_color(220, 220, 220)
+    pdf.cell(200, 10, "GRAND TOTAL (Remuneration + TA + DA)", 1, 0, 'R', True)
+    pdf.cell(70, 10, f"Rs. {grand_total}", 1, 1, 'C', True)
+    
+    pdf.set_font("Helvetica", 'I', 10)
+    pdf.cell(0, 10, f"Rupees {num_to_words(grand_total)}", align='C', ln=1)
+
+    pdf.ln(20); pdf.set_font("Helvetica", 'B', 10)
+    pdf.cell(90, 5, "Examiner Signature", 0, 0, 'L')
+    pdf.cell(90, 5, "Checked by (ACOE)", 0, 0, 'C')
+    pdf.cell(90, 5, "Controller of Examinations", 0, 1, 'R')
+
+    output = io.BytesIO(); pdf.output(output); output.seek(0)
+    return send_file(output, as_attachment=True, download_name=f"Valuation_Claim_{fac_id}.pdf", mimetype='application/pdf')
+@app.route('/preview_valuation_claim/<int:phase_id>', methods=['POST'])
+def preview_valuation_claim(phase_id):
+    if 'user' not in session: return redirect(url_for('index'))
+    fac_id = request.form.get('faculty_id')
+    db = get_db(); c = db.cursor(dictionary=True)
+    c.execute("SELECT * FROM faculty_master WHERE faculty_id=%s", (fac_id,))
+    fac = c.fetchone(); db.close()
+    
+    if not fac:
+        flash(f"Faculty ID {fac_id} not found!", "danger"); return redirect(url_for('valuation_hub', phase_id=phase_id))
+
+    all_packets = compute_all_packets(phase_id)
+    my_packets = [p for p in all_packets if name_match(fac['name'], p['staff_name'])]
+
+    if not my_packets:
+        flash(f"No data for {fac['name']}.", "warning"); return redirect(url_for('valuation_hub', phase_id=phase_id))
+
+    summary, total_scripts, total_amt = {}, 0, 0
+    for p in my_packets:
+        key = (p['course_code'], p['course_name'], p['degree'])
+        summary[key] = summary.get(key, 0) + p['scripts']
+
+    final_rows = []
+    for (code, name, deg), qty in summary.items():
+        rate = 35 if "M.E" in str(deg).upper() else 25
+        amt = max(qty * rate, 200)
+        final_rows.append({'code': code, 'name': name, 'deg': deg, 'qty': qty, 'amt': amt})
+        total_scripts += qty; total_amt += amt
+
+    return render_template('valuation_claim_preview.html', phase_id=phase_id, fac=fac, rows=final_rows, total_scripts=total_scripts, total_amt=total_amt)
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
