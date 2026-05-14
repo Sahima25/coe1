@@ -9,7 +9,7 @@
         body { background-color: #f4f6f9; }
         .card { border-radius: 12px; border: none; }
         .table-responsive { border-radius: 12px; }
-        code { color: #d63384; word-wrap: break-word; white-space: pre-wrap; }
+        .badge-custom { font-size: 0.8rem; padding: 5px 10px; }
     </style>
 </head>
 <body class="p-4">
@@ -42,8 +42,8 @@
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="fw-bold mb-3"><i class="fas fa-file-upload text-success me-2"></i>1. Upload Subjects</h5>
-                    <div class="mb-3">
+                    <h5 class="fw-bold mb-3"><i class="fas fa-file-upload text-success me-2"></i>1. Upload Subjects & Dummy Start</h5>
+                    <div class="d-flex justify-content-between mb-3">
                         <a href="/download_template?type=val_subjects" class="btn btn-sm btn-outline-success fw-bold">
                             <i class="fas fa-file-excel me-1"></i> Template
                         </a>
@@ -59,8 +59,8 @@
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="fw-bold mb-3"><i class="fas fa-users text-primary me-2"></i>2. Upload Allocations</h5>
-                    <div class="mb-3">
+                    <h5 class="fw-bold mb-3"><i class="fas fa-users text-primary me-2"></i>2. Upload Examiner Allocations</h5>
+                    <div class="d-flex justify-content-between mb-3">
                         <a href="/download_template?type=val_allocations" class="btn btn-sm btn-outline-primary fw-bold">
                             <i class="fas fa-file-excel me-1"></i> Template
                         </a>
@@ -75,6 +75,43 @@
     </div>
 
     <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Subject Inventory</h5>
+            <span class="badge bg-light text-dark">{{ subjects|length }} Subjects</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>Date</th>
+                        <th>Session</th>
+                        <th>Dept</th>
+                        <th>Course Code</th>
+                        <th>Course Name</th>
+                        <th class="text-center">Strength</th>
+                        <th class="text-center text-danger">Dummy Start</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in subjects %}
+                    <tr>
+                        <td>{{ s.exam_date }}</td>
+                        <td><span class="badge bg-info text-dark">{{ s.session_fn_an }}</span></td>
+                        <td>{{ s.department }}</td>
+                        <td class="fw-bold text-primary">{{ s.course_code }}</td>
+                        <td><small>{{ s.course_name }}</small></td>
+                        <td class="text-center">{{ s.valuation_strength }}</td>
+                        <td class="text-center fw-bold text-danger">{{ s.dummy_number_start or '---' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">No subjects found. Please upload the excel file.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
         <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
             <h5 class="mb-0 fw-bold text-dark">Verified Examiner Allocations</h5>
             <a href="/edit_val_examiners/{{ phase_id }}" class="btn btn-sm btn-outline-dark">
@@ -83,14 +120,13 @@
         </div>
         <div class="table-responsive">
             <table class="table table-bordered table-hover mb-0 align-middle">
-                <thead class="table-primary border-primary text-center">
+                <thead class="table-primary border-primary">
                     <tr>
                         <th style="width: 5%;">S.No</th>
-                        <th style="width: 15%;">Staff Name</th>
-                        <th style="width: 5%;">Type</th>
+                        <th style="width: 20%;">Staff Name</th>
                         <th style="width: 25%;">College Address</th>
-                        <th style="width: 10%;">Mobile</th>
-                        <th style="width: 40%;">Allocations (Session-wise Data)</th>
+                        <th style="width: 12%;">Mobile</th>
+                        <th style="width: 38%;">Allocations (Session-wise Data)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -98,15 +134,8 @@
                     <tr>
                         <td class="text-center fw-bold">{{ ex.s_no }}</td>
                         <td class="fw-bold text-primary">{{ ex.staff_name }}</td>
-                        <td class="text-center">
-                            {% if 'External' in ex.allocations_json %}
-                                <span class="badge bg-danger">External</span>
-                            {% else %}
-                                <span class="badge bg-info text-dark">Internal</span>
-                            {% endif %}
-                        </td>
                         <td><small class="text-muted">{{ ex.college_address }}</small></td>
-                        <td class="text-center small">{{ ex.mobile }}</td>
+                        <td>{{ ex.mobile }}</td>
                         <td>
                             <div class="bg-light p-2 rounded border" style="max-height: 100px; overflow-y: auto;">
                                 <code style="font-size: 10px; color: #666;">{{ ex.allocations_json }}</code>
@@ -114,7 +143,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" class="text-center text-muted py-4">No examiner data extracted yet. Please upload the allocations file.</td></tr>
+                    <tr><td colspan="5" class="text-center text-muted py-4">No examiner data extracted yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -123,7 +152,7 @@
 
     <div class="row mt-4 pb-5">
         <div class="col-md-6">
-            <div class="card shadow border-0 overflow-hidden h-100">
+            <div class="card shadow border-0 overflow-hidden">
                 <div class="card-header bg-primary text-white fw-bold py-3">
                     <i class="fas fa-file-invoice-dollar me-2"></i> Examiner Valuation Claim Form
                 </div>
@@ -133,13 +162,13 @@
                             <label class="form-label fw-bold">Step 1: Enter Faculty ID</label>
                             <div class="input-group input-group-lg">
                                 <span class="input-group-text bg-light text-primary"><i class="fas fa-user-tag"></i></span>
-                                <input type="text" name="faculty_id" class="form-control shadow-none" placeholder="Enter Faculty ID" required>
+                                <input type="text" name="faculty_id" class="form-control" placeholder="Enter Faculty ID" required>
                                 <button type="submit" class="btn btn-primary fw-bold px-4">Generate Preview</button>
                             </div>
-                            <div class="form-text mt-3 bg-light p-3 border-start border-primary border-4 rounded-end">
+                            <div class="form-text mt-3 bg-light p-2 border-start border-primary border-4">
                                 <i class="fas fa-info-circle text-primary me-1"></i> 
-                                <strong>Logic:</strong> ₹25/script (B.E.) & ₹35/script (M.E.)<br>
-                                <strong>Min Claim:</strong> ₹200 per individual subject.
+                                <strong>Logic:</strong> ₹25 per script for B.E. / ₹35 per script for M.E. <br>
+                                <strong>Constraint:</strong> Minimum claim of ₹200 per individual subject.
                             </div>
                         </div>
                     </form>
@@ -153,12 +182,7 @@
                     <div class="text-center">
                         <i class="fas fa-check-circle fa-4x text-warning mb-3"></i>
                         <h4 class="fw-bold mb-1">{{ examiners|length }} Examiners Ready</h4>
-                        <p class="text-white-50 small">Data is processed and verified for Phase {{ phase_id }}</p>
-                        {% if examiners|length > 0 %}
-                            <p class="badge bg-success">Status: Ready for Claims</p>
-                        {% else %}
-                            <p class="badge bg-secondary">Status: Waiting for Data</p>
-                        {% endif %}
+                        <p class="text-white-50">Data is processed and verified for Phase {{ phase_id }}</p>
                     </div>
                 </div>
             </div>
