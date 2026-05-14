@@ -5,18 +5,28 @@
     <title>Valuation Phase Hub</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style> body { background-color: #f4f6f9; } </style>
+    <style>
+        body { background-color: #f4f6f9; }
+        .card { border-radius: 12px; border: none; }
+        .table-responsive { border-radius: 12px; }
+        .badge-custom { font-size: 0.8rem; padding: 5px 10px; }
+    </style>
 </head>
 <body class="p-4">
 
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">Phase Details & Uploads</h2>
+        <div>
+            <h2 class="fw-bold text-primary mb-0">Phase Details & Uploads</h2>
+            <p class="text-muted">Manage subjects, examiner allocations, and generate claim forms.</p>
+        </div>
         <div>
             <a href="/issue_register_hub/{{ phase_id }}" class="btn btn-warning shadow-sm me-2 fw-bold text-dark">
-                <i class="fas fa-book me-1"></i> Generate Issue Registers
+                <i class="fas fa-book me-1"></i> Issue Registers
             </a>
-            <a href="/dashboard" class="btn btn-secondary shadow-sm">Dashboard</a>
+            <a href="/dashboard" class="btn btn-secondary shadow-sm">
+                <i class="fas fa-home me-1"></i> Dashboard
+            </a>
         </div>
     </div>
 
@@ -32,13 +42,15 @@
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="fw-bold mb-3">1. Upload Subjects & Dummy Numbers Excel</h5>
-                    <a href="/download_template?type=val_subjects" class="btn btn-sm btn-outline-success fw-bold mb-3">
-                        <i class="fas fa-file-excel me-1"></i> Download Subjects Template
-                    </a>
+                    <h5 class="fw-bold mb-3"><i class="fas fa-file-upload text-success me-2"></i>1. Upload Subjects & Dummy Start</h5>
+                    <div class="d-flex justify-content-between mb-3">
+                        <a href="/download_template?type=val_subjects" class="btn btn-sm btn-outline-success fw-bold">
+                            <i class="fas fa-file-excel me-1"></i> Template
+                        </a>
+                    </div>
                     <form action="/upload_val_subjects/{{ phase_id }}" method="POST" enctype="multipart/form-data" class="d-flex gap-2">
-                        <input type="file" name="file" class="form-control" accept=".xlsx, .xls, .csv" required>
-                        <button type="submit" class="btn btn-success fw-bold px-4">Upload</button>
+                        <input type="file" name="file" class="form-control" accept=".xlsx, .xls" required>
+                        <button type="submit" class="btn btn-success fw-bold">Upload</button>
                     </form>
                 </div>
             </div>
@@ -47,85 +59,135 @@
         <div class="col-md-6">
             <div class="card shadow-sm h-100">
                 <div class="card-body">
-                    <h5 class="fw-bold mb-3">2. Upload Examiner Allocations Excel</h5>
-                    <a href="/download_template?type=val_allocations" class="btn btn-sm btn-outline-primary fw-bold mb-3">
-                        <i class="fas fa-file-excel me-1"></i> Download Allocations Template
-                    </a>
+                    <h5 class="fw-bold mb-3"><i class="fas fa-users text-primary me-2"></i>2. Upload Examiner Allocations</h5>
+                    <div class="d-flex justify-content-between mb-3">
+                        <a href="/download_template?type=val_allocations" class="btn btn-sm btn-outline-primary fw-bold">
+                            <i class="fas fa-file-excel me-1"></i> Template
+                        </a>
+                    </div>
                     <form action="/upload_val_examiners/{{ phase_id }}" method="POST" enctype="multipart/form-data" class="d-flex gap-2">
-                        <input type="file" name="file" class="form-control" accept=".xlsx, .xls, .csv" required>
-                        <button type="submit" class="btn btn-primary fw-bold px-4">Upload</button>
+                        <input type="file" name="file" class="form-control" accept=".xlsx, .xls" required>
+                        <button type="submit" class="btn btn-primary fw-bold">Upload</button>
                     </form>
                 </div>
             </div>
         </div>
     </div>
 
-    <h5 class="mt-4 fw-bold">Subject Inventory</h5>
-    <div class="table-responsive mb-5 shadow-sm rounded">
-        <table class="table table-bordered table-dark table-hover mb-0 align-middle">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Session</th>
-                    <th>Dept</th>
-                    <th>Course Code</th>
-                    <th>Course Name</th>
-                    <th>Strength</th>
-                    <th>Dummy No Start</th>
-                </tr>
-            </thead>
-            <tbody class="table-light">
-                {% for s in subjects %}
-                <tr>
-                    <td>{{ s.exam_date }}</td>
-                    <td>{{ s.session_fn_an }}</td>
-                    <td>{{ s.department }}</td>
-                    <td class="fw-bold">{{ s.course_code }}</td>
-                    <td>{{ s.course_name }}</td>
-                    <td>{{ s.valuation_strength }}</td>
-                    <td class="fw-bold text-danger">{{ s.dummy_number_start }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" class="text-center text-muted py-3">No subjects uploaded yet. Download the template, fill it, and upload above.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">Subject Inventory</h5>
+            <span class="badge bg-light text-dark">{{ subjects|length }} Subjects</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>Date</th>
+                        <th>Session</th>
+                        <th>Dept</th>
+                        <th>Course Code</th>
+                        <th>Course Name</th>
+                        <th class="text-center">Strength</th>
+                        <th class="text-center text-danger">Dummy Start</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in subjects %}
+                    <tr>
+                        <td>{{ s.exam_date }}</td>
+                        <td><span class="badge bg-info text-dark">{{ s.session_fn_an }}</span></td>
+                        <td>{{ s.department }}</td>
+                        <td class="fw-bold text-primary">{{ s.course_code }}</td>
+                        <td><small>{{ s.course_name }}</small></td>
+                        <td class="text-center">{{ s.valuation_strength }}</td>
+                        <td class="text-center fw-bold text-danger">{{ s.dummy_number_start or '---' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-muted py-4">No subjects found. Please upload the excel file.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
-        <h5 class="fw-bold">Examiner Allocations</h5>
-        <a href="/edit_val_examiners/{{ phase_id }}" class="btn btn-sm btn-outline-dark"><i class="fas fa-edit me-1"></i> Verify / Edit Allocations</a>
-    </div>
-    
-    <div class="table-responsive shadow-sm rounded mb-5">
-        <table class="table table-bordered table-hover mb-0 align-middle">
-            <thead class="table-primary border-primary">
-                <tr>
-                    <th>S.No</th>
-                    <th>Staff Name</th>
-                    <th>College Address</th>
-                    <th>Mobile</th>
-                    <th>Email</th>
-                    <th>Allocations (JSON)</th>
-                </tr>
-            </thead>
-            <tbody class="table-light border-primary">
-                {% for ex in examiners %}
-                <tr>
-                    <td class="text-center fw-bold">{{ ex.s_no }}</td>
-                    <td class="fw-bold text-primary">{{ ex.staff_name }}</td>
-                    <td><small>{{ ex.college_address }}</small></td>
-                    <td>{{ ex.mobile }}</td>
-                    <td>{{ ex.email }}</td>
-                    <td><pre class="m-0 text-muted" style="font-size: 11px;">{{ ex.allocations | tojson }}</pre></td>
-                </tr>
-                {% else %}
-                <tr><td colspan="6" class="text-center text-muted py-3">No examiners uploaded yet. Download the template, fill it, and upload above.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+            <h5 class="mb-0 fw-bold text-dark">Verified Examiner Allocations</h5>
+            <a href="/edit_val_examiners/{{ phase_id }}" class="btn btn-sm btn-outline-dark">
+                <i class="fas fa-edit me-1"></i> Quick Edit Raw Data
+            </a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover mb-0 align-middle">
+                <thead class="table-primary border-primary">
+                    <tr>
+                        <th style="width: 5%;">S.No</th>
+                        <th style="width: 20%;">Staff Name</th>
+                        <th style="width: 25%;">College Address</th>
+                        <th style="width: 12%;">Mobile</th>
+                        <th style="width: 38%;">Allocations (Session-wise Data)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ex in examiners %}
+                    <tr>
+                        <td class="text-center fw-bold">{{ ex.s_no }}</td>
+                        <td class="fw-bold text-primary">{{ ex.staff_name }}</td>
+                        <td><small class="text-muted">{{ ex.college_address }}</small></td>
+                        <td>{{ ex.mobile }}</td>
+                        <td>
+                            <div class="bg-light p-2 rounded border" style="max-height: 100px; overflow-y: auto;">
+                                <code style="font-size: 10px; color: #666;">{{ ex.allocations_json }}</code>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">No examiner data extracted yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
+    <div class="row mt-4 pb-5">
+        <div class="col-md-6">
+            <div class="card shadow border-0 overflow-hidden">
+                <div class="card-header bg-primary text-white fw-bold py-3">
+                    <i class="fas fa-file-invoice-dollar me-2"></i> Examiner Valuation Claim Form
+                </div>
+                <div class="card-body bg-white p-4">
+                    <form action="/preview_valuation_claim/{{ phase_id }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Step 1: Enter Faculty ID</label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text bg-light text-primary"><i class="fas fa-user-tag"></i></span>
+                                <input type="text" name="faculty_id" class="form-control" placeholder="Enter Faculty ID" required>
+                                <button type="submit" class="btn btn-primary fw-bold px-4">Generate Preview</button>
+                            </div>
+                            <div class="form-text mt-3 bg-light p-2 border-start border-primary border-4">
+                                <i class="fas fa-info-circle text-primary me-1"></i> 
+                                <strong>Logic:</strong> ₹25 per script for B.E. / ₹35 per script for M.E. <br>
+                                <strong>Constraint:</strong> Minimum claim of ₹200 per individual subject.
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card shadow border-0 bg-dark text-white h-100">
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <div class="text-center">
+                        <i class="fas fa-check-circle fa-4x text-warning mb-3"></i>
+                        <h4 class="fw-bold mb-1">{{ examiners|length }} Examiners Ready</h4>
+                        <p class="text-white-50">Data is processed and verified for Phase {{ phase_id }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
